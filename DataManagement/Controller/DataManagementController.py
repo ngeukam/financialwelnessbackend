@@ -3,7 +3,7 @@ import json
 from EcommerceInventory.Helpers import CommonListAPIMixin, createParsedCreatedAtUpdatedAt, renderResponse
 from DataManagement.models import DataFile, ProcessingOptions
 from DataManagement.utils.file_handlers import handle_uploaded_file
-from DataManagement.utils.data_analysis import analyze_data
+from DataManagement.utils.data_analysis import UniversalJSONAnalyzer
 from rest_framework import serializers
 from rest_framework.permissions import IsAuthenticated
 from rest_framework_simplejwt.authentication import JWTAuthentication
@@ -241,7 +241,6 @@ class DataAnalysisSerializer(serializers.Serializer):
     operation = serializers.CharField(max_length=100)
     parameters = serializers.JSONField(required=False)
 
-
 class ProcessAndUploadAPIView(generics.CreateAPIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsAuthenticated]
@@ -266,7 +265,6 @@ class ProcessAndUploadAPIView(generics.CreateAPIView):
             # 3. Process optional parameters
             # rows_to_remove = request.data.get('rows_to_remove')
             min_empty_values = self._clean_optional_param(request.data.get('min_empty_values'), 'minEmptyValues')
-            print('min_empty_values', min_empty_values)
             columns_to_remove = request.data.get('columns_to_remove')
             if columns_to_remove and isinstance(columns_to_remove, str):
                 columns_to_remove = [col.strip() for col in columns_to_remove.split(',')]
@@ -474,7 +472,7 @@ class FileStatsView(APIView):
                     'combined_mean': sum(
                         c['numeric_stats']['mean'] * c['record_count'] 
                         for c in column_instances
-                    ) / sum(c['record_count'] for c in column_instances)
+                    ) / sum(c['record_count'] for c in column_instances),
                 }
         
         return base_stats
@@ -532,6 +530,7 @@ class FileStatsView(APIView):
                 'min': df[col].min() if pd.api.types.is_numeric_dtype(df[col]) else None,
                 'max': df[col].max() if pd.api.types.is_numeric_dtype(df[col]) else None,
                 'mean': df[col].mean() if pd.api.types.is_numeric_dtype(df[col]) else None,
+                'sum': df[col].sum() if pd.api.types.is_numeric_dtype(df[col]) else None,
                 'distribution': 1 - (df[col].isnull().sum() / len(df)) if len(df) > 0 else 0,
                 'sample_data': self.get_sample_values(df[col])
             }
@@ -712,30 +711,31 @@ class ImportHistoryFilesListView(generics.ListAPIView):
 class DataAnalysisAPIView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsAuthenticated]
-    
+
     def post(self, request, file_id, format=None):
-        """Existing analysis functionality"""
+        """Perform data analysis using UniversalJSONAnalyzer on stored JSON data."""
         try:
             uploaded_file = DataFile.objects.get(pk=file_id)
         except DataFile.DoesNotExist:
             return Response({'error': 'File not found'}, status=404)
-        
-        if uploaded_file.file_type not in ['csv', 'xlsx', 'xls', 'pdf']:
-            return Response(
-                {'error': 'Data analysis only supported for CSV, Excel and PDF files'},
-                status=400
-            )
-        
+
+        if not uploaded_file.processed_data:
+            return Response({'error': 'No processed data available for analysis'}, status=400)
+
         serializer = DataAnalysisSerializer(data=request.data)
         if not serializer.is_valid():
             return Response(serializer.errors, status=400)
-        
-        analysis_result = analyze_data(
-            uploaded_file.file.path,
-            serializer.validated_data['operation'],
-            serializer.validated_data.get('parameters', {})
-        )
-        
+
+        operation = serializer.validated_data['operation']
+        parameters = serializer.validated_data.get('parameters', {})
+        # Get JSON data from processed_data field
+        json_data = uploaded_file.processed_data
+        # Perform analysis using UniversalJSONAnalyzer
+        analyzer = UniversalJSONAnalyzer()
+        try:
+            analysis_result = analyzer.analyze(json_data, operation, parameters)
+        except ValueError as ve:
+            return Response({'error': str(ve)}, status=400)
         return Response({
             'file': DataFileDisplaySerializer(uploaded_file, context={'request': request}).data,
             'analysis': analysis_result

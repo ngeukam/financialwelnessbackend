@@ -1,299 +1,450 @@
 import pandas as pd
 import numpy as np
 from scipy import stats
+import matplotlib
+matplotlib.use('Agg')  # Set non-interactive backend
 import matplotlib.pyplot as plt
 import io
 import base64
-import matplotlib
-matplotlib.use('Agg')
-from PyPDF2 import PdfReader
-import re
-from collections import Counter
-from wordcloud import WordCloud  # pip install wordcloud
-from sklearn.cluster import KMeans
-from sklearn.decomposition import PCA
-from openpyxl import load_workbook 
-import pdfplumber
+import json
+from typing import Dict, List, Union, Any
+from collections import defaultdict
 from datetime import datetime
+import seaborn as sns
 
-def analyze_data(file_path, operation, parameters):
-      # Determine file type
-    if file_path.endswith(('.csv', '.xlsx', '.xls', '.pdf')):
-        return analyze_tabular_data(file_path, operation, parameters)
-    else:
-        raise ValueError("Unsupported file format")
-
-def analyze_tabular_data(file_path, operation, parameters):
-    """Enhanced tabular data analysis function with improved PDF and Excel handling"""
-    
-    # Read file based on extension
-    if file_path.endswith('.csv'):
-        df = pd.read_csv(file_path)
-    elif file_path.endswith('.pdf'):
-        # Process PDF with pdfplumber for better table extraction
-        tables = []
-        with pdfplumber.open(file_path) as pdf:
-            for page in pdf.pages:
-                for table in page.extract_tables():
-                    # Convert each table to a DataFrame
-                    df_table = pd.DataFrame(table[1:], columns=table[0])
-                    tables.append(df_table)
-        
-        if not tables:
-            raise ValueError("No tables found in PDF")
-        
-        # For simplicity, we'll use the first table found
-        # In a production environment, you might want to return all tables
-        df = tables[0]
-        
-    elif file_path.endswith(('.xlsx', '.xls')):
-        # Get all sheet names first
-        wb = load_workbook(file_path, read_only=True)
-        sheet_names = wb.sheetnames
-        wb.close()
-        
-        # Filter out empty sheets
-        non_empty_sheets = []
-        for sheet in sheet_names:
-            sheet_df = pd.read_excel(file_path, sheet_name=sheet)
-            if not sheet_df.empty:
-                non_empty_sheets.append({
-                    'sheet_name': sheet,
-                    'dataframe': sheet_df
-                })
-        
-        if not non_empty_sheets:
-            raise ValueError("No data found in any Excel sheet")
-        
-        # For operations that can work with multiple sheets, we might process all
-        # For now, we'll use the first non-empty sheet for compatibility
-        df = non_empty_sheets[0]['dataframe']
-        
-        # Store sheet info in parameters for potential multi-sheet operations
-        parameters['_excel_sheets'] = non_empty_sheets
-    else:
-        raise ValueError("Unsupported file format")
-    
-    # Clean the dataframe by converting numeric columns
-    for col in df.columns:
-        # First try to convert to datetime
-        try:
-            df[col] = pd.to_datetime(df[col], errors='raise', infer_datetime_format=True)
-            continue  # Skip numeric conversion if it's a date
-        except (ValueError, TypeError):
-            pass
-        
-        # Then try to convert to numeric
-        try:
-            # Try converting to float first
-            numeric_vals = pd.to_numeric(df[col], errors='raise')
-            
-            # Check if it's actually integer (all whole numbers)
-            if all(x == int(x) for x in numeric_vals.dropna() if not pd.isna(x)):
-                df[col] = numeric_vals.astype('Int64')  # Using Int64 to handle NaN
-            else:
-                df[col] = numeric_vals
-        except (ValueError, TypeError):
-            # If both conversions fail, leave as string
-            pass
-    
-    # Perform requested operation
-    if operation == 'describe':
-        # For datetime columns, calculate different stats
-        description = df.describe(include='all', datetime_is_numeric=True)
-        
-        # Convert results to JSON-compatible format
-        result = {}
-        for col in description.columns:
-            col_stats = {}
-            for stat, value in description[col].items():
-                if pd.isna(value) or (isinstance(value, (float, int)) and np.isinf(value)):
-                    col_stats[stat] = None
-                elif isinstance(value, (pd.Timestamp, datetime)):
-                    col_stats[stat] = value.isoformat()
-                elif isinstance(value, (np.integer, np.floating)):
-                    col_stats[stat] = int(value) if isinstance(value, np.integer) else float(value)
-                else:
-                    col_stats[stat] = str(value)
-            result[col] = col_stats
-        
-        return {'result': result}
-    
-    elif operation == 'correlation':
-        df = df.apply(pd.to_numeric, errors='coerce')  # Convert all columns to numeric
-        df = df.dropna()  # Drop NaNs to avoid issues
-        correlation_matrix = df.corr()
-        
-        # Convert numpy types to native Python types for JSON serialization
-        result = {
-            col: {
-                other_col: float(value) if pd.notna(value) else None
-                for other_col, value in row.items()
-            }
-            for col, row in correlation_matrix.to_dict().items()
+class UniversalJSONAnalyzer:
+    def __init__(self):
+        self.supported_operations = {
+            'describe': self._describe,
+            'value_counts': self._value_counts,
+            'time_series': self._time_series,
+            'correlation': self._correlation,
+            'pattern_detect': self._pattern_detect,
+            'nested_aggregate': self._nested_aggregate
         }
-        
-        return {'result': result}
     
-    elif operation == 'value_counts':
-        column = parameters.get('column')
-        if not column or column not in df.columns:
-            raise ValueError(f"Column '{column}' not found in data")
+    def analyze(self, json_data: Union[str, Dict], operation: str, params: Dict = None) -> Dict:
+        """Universal analysis entry point"""
+        # print('jsondir', dir(json_data))
+        data = self._load_data(json_data["tables"][0]["data"])
+        if operation not in self.supported_operations:
+            raise ValueError(f"Unsupported operation. Choose from: {list(self.supported_operations.keys())}")
+        
+        return self.supported_operations[operation](data, params or {})
+    
+    def _load_data(self, json_data: Union[str, Dict]) -> Any:
+        """Load and normalize JSON data"""
+        if isinstance(json_data, str):
+            try:
+                return json.loads(json_data)
+            except json.JSONDecodeError:
+                try:
+                    with open(json_data, 'r') as f:
+                        return json.load(f)
+                except Exception as e:
+                    raise ValueError(f"Invalid JSON input: {str(e)}")
+        return json_data
+    
+    def _flatten_data(self, data: Any, prefix: str = '') -> Dict:
+        """Recursively flatten nested JSON structures"""
+        flat = {}
+        if isinstance(data, dict):
+            for k, v in data.items():
+                flat.update(self._flatten_data(v, f"{prefix}{k}."))
+        elif isinstance(data, (list, tuple)) and len(data) > 0 and all(isinstance(x, dict) for x in data):
+            # Handle lists of dictionaries (common in API responses)
+            for i, item in enumerate(data):
+                flat.update(self._flatten_data(item, f"{prefix}{i}."))
+        else:
+            flat[prefix[:-1]] = data
+        return flat
+    
+    def _to_dataframe(self, data: Any) -> pd.DataFrame:
+        """Convert arbitrary JSON to DataFrame"""
+        if isinstance(data, dict):
+            if all(isinstance(v, (list, dict)) for v in data.values()):
+                return pd.DataFrame.from_dict(data)
+            return pd.DataFrame([self._flatten_data(data)])
+        elif isinstance(data, list):
+            return pd.DataFrame([self._flatten_data(x) for x in data])
+        return pd.DataFrame(data)
+                
+    def _describe(self, data: Any, params: Dict) -> Dict:
+        """Statistical description of all fields with NaN handling"""
+        df = self._to_dataframe(data)
+        
+        # Convert NaN values to None (which becomes null in JSON)
+        def clean_value(v):
+            if pd.isna(v):
+                return None
+            if isinstance(v, (np.floating, float)):
+                return float(v)
+            if isinstance(v, (np.integer, int)):
+                return int(v)
+            return v
+        
+        stats = {}
+        for col in df.columns:
+            col_stats = {}
+            dtype = str(df[col].dtype)
+            
+            if pd.api.types.is_numeric_dtype(df[col]):
+                col_stats.update({
+                    'type': 'numeric',
+                    'min': clean_value(df[col].min()),
+                    'max': clean_value(df[col].max()),
+                    'mean': clean_value(df[col].mean()),
+                    'std': clean_value(df[col].std()),
+                    'null_count': int(df[col].isna().sum())
+                })
+            elif pd.api.types.is_datetime64_any_dtype(df[col]):
+                col_stats.update({
+                    'type': 'datetime',
+                    'min': clean_value(df[col].min()),
+                    'max': clean_value(df[col].max()),
+                    'null_count': int(df[col].isna().sum())
+                })
+            else:
+                col_stats.update({
+                    'type': 'categorical',
+                    'unique_values': int(df[col].nunique()),
+                    'top_value': clean_value(df[col].mode().iloc[0]) if not df[col].empty else None,
+                    'null_count': int(df[col].isna().sum())
+                })
+            
+            stats[col] = {'dtype': dtype, **col_stats}
+        
+        return {'statistics': stats}
+    
+    def _value_counts(self, data: Any, params: Dict) -> Dict:
+        """Frequency analysis with visualization"""
+        df = self._to_dataframe(data)
+        column = params.get('column', df.columns[0])
+        
+        if column not in df.columns:
+            raise ValueError(f"Column '{column}' not found")
         
         counts = df[column].value_counts().to_dict()
         
-        # Generate and save plot to a bytes buffer
-        buf = io.BytesIO()
-        plt.figure(figsize=(10, 6))
-        df[column].value_counts().plot(kind='barh')
-        plt.title(f'Value Counts for {column}')
-        plt.xlabel('Count')
-        plt.ylabel('Value')
-        plt.tight_layout()
-        plt.savefig(buf, format='png')
-        plt.close()
+        # Generate plot (with non-GUI backend)
+        plt.switch_backend('Agg')  # Ensure no GUI backend is used
+        fig, ax = plt.subplots(figsize=(10, 6))
+        df[column].value_counts().head(20).plot(kind='barh', ax=ax)
+        ax.set_title(f'Value Distribution: {column}')
         
-        # Convert to base64 for easy transfer
+        buf = io.BytesIO()
+        plt.savefig(buf, format='png', bbox_inches='tight', dpi=100)
         buf.seek(0)
-        image_base64 = base64.b64encode(buf.read()).decode('utf-8')
+        plot_base64 = base64.b64encode(buf.read()).decode('utf-8')
+        plt.close(fig)  # Explicitly close the figure
         
         return {
-            'result': counts,
-            'plot': image_base64
+            'column': column,
+            'counts': counts,
+            'plot': plot_base64  # Base64-encoded PNG
         }
     
-    elif operation == 'linear_regression':
-        x_col = parameters.get('x_column')
-        y_col = parameters.get('y_column')
+    def _time_series(self, data: Any, params: Dict) -> Dict:
+        """Temporal analysis with robust datetime handling and visualization"""
+        # Configure matplotlib to use non-interactive backend
         
-        if not x_col or not y_col or x_col not in df.columns or y_col not in df.columns:
-            raise ValueError("Both x_column and y_column must be valid columns")
+        df = self._to_dataframe(data)
         
-        # Convert columns to numeric, forcing errors to NaN
-        df[x_col] = pd.to_numeric(df[x_col], errors='coerce')
-        df[y_col] = pd.to_numeric(df[y_col], errors='coerce')
+        # Common datetime formats to try (order by likelihood)
+        DATETIME_FORMATS = [
+            '%Y-%m-%d', '%m/%d/%Y', '%d/%m/%Y',   # Dates
+            '%Y-%m-%d %H:%M:%S', '%m/%d/%Y %H:%M', # Date-times
+            '%Y%m%d', '%d%m%Y',                    # Compact dates
+            '%Y-%m-%dT%H:%M:%S',                   # ISO format
+            '%Y-%m-%d %H:%M:%S.%f'                 # With microseconds
+        ]
         
-        # Drop NaN values
-        df = df.dropna(subset=[x_col, y_col])
+        # Auto-detect time column if not specified
+        time_col = params.get('date_column')
+        if not time_col:
+            for col in df.columns:
+                if pd.api.types.is_datetime64_any_dtype(df[col]):
+                    time_col = col
+                    break
+                elif pd.api.types.is_string_dtype(df[col]):
+                    for fmt in DATETIME_FORMATS:
+                        try:
+                            converted = pd.to_datetime(df[col], format=fmt, errors='raise')
+                            if converted.notna().any():
+                                time_col = col
+                                df[col] = converted
+                                break
+                        except (ValueError, TypeError):
+                            continue
+                    if time_col:
+                        break
         
-        # Ensure we have at least two valid data points
-        if len(df) < 2:
-            raise ValueError("Not enough valid data points for linear regression")
+        if not time_col:
+            raise ValueError("No valid datetime column found or specifed")
         
-        # Ensure no infinite values
-        if np.isinf(df[x_col]).any() or np.isinf(df[y_col]).any():
-            raise ValueError("Columns contain infinite values")
+        # Ensure proper datetime type
+        if not pd.api.types.is_datetime64_any_dtype(df[time_col]):
+            df[time_col] = pd.to_datetime(df[time_col], errors='coerce')
         
-        x = df[x_col].values
-        y = df[y_col].values
+        # Auto-detect value columns if not specified
+        value_cols = params.get('value_columns')
+        if not value_cols:
+            value_cols = [
+                col for col in df.columns 
+                if pd.api.types.is_numeric_dtype(df[col]) 
+                and col != time_col
+            ]
         
-        slope, intercept, r_value, p_value, std_err = stats.linregress(x, y)
+        if not value_cols:
+            raise ValueError("No numeric columns found for analysis")
         
-        # Generate plot
-        plt.figure(figsize=(10, 6))
-        plt.scatter(x, y, label='Data points')
-        plt.plot(x, slope * x + intercept, color='red', label='Regression line')
-        plt.xlabel(x_col)
-        plt.ylabel(y_col)
-        plt.title(f'Linear Regression: {y_col} vs {x_col}')
-        plt.legend()
+        # Set default aggregation if not specified
+        agg_func = params.get('agg_function', 'mean')
         
-        # Save plot to base64
+        # Resample time series with forward-fill for missing periods
+        freq = params.get('frequency', 'D')  # Daily by default
+        resampled = (
+            df.set_index(time_col)[value_cols]
+            .resample(freq)
+            .agg(agg_func)
+            .ffill()  # Forward fill missing values
+        )
+        
+        # Generate plot with improved styling
+        plt.switch_backend('Agg')
+        fig, ax = plt.subplots(figsize=(12, 6))
+        
+        for col in value_cols:
+            ax.plot(
+                resampled.index,
+                resampled[col],
+                label=col,
+                marker='o',
+                markersize=4,
+                linewidth=1.5,
+                alpha=0.8
+            )
+        
+        ax.set_title(f"Time Series Analysis ({freq} frequency)", pad=20)
+        ax.set_xlabel(time_col, labelpad=10)
+        ax.set_ylabel("Value", labelpad=10)
+        ax.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
+        ax.grid(True, alpha=0.3)
+        fig.autofmt_xdate()
+        plt.tight_layout()
+        
+        # Save plot to buffer
         buf = io.BytesIO()
-        plt.savefig(buf, format='png')
+        plt.savefig(buf, format='png', dpi=150, bbox_inches='tight')
         buf.seek(0)
         plot_base64 = base64.b64encode(buf.read()).decode('utf-8')
-        plt.close()
+        plt.close(fig)
         
-        result = {
-            'slope': slope,
-            'intercept': intercept,
-            'r_squared': r_value ** 2,
-            'p_value': p_value,
-            'std_err': std_err,
-            'plot': plot_base64
+        # Prepare JSON-safe output
+        def clean_value(v):
+            if pd.isna(v):
+                return None
+            if isinstance(v, (np.floating, float)):
+                return float(v)
+            if isinstance(v, (np.integer, int)):
+                return int(v)
+            if isinstance(v, (pd.Timestamp, np.datetime64)):
+                return v.isoformat()
+            return str(v)
+        
+        sample_data = {
+            time_col: [clean_value(x) for x in resampled.index[:10]],
+            **{
+                col: [clean_value(x) for x in resampled[col][:10]]
+                for col in value_cols
+            }
         }
-    
-    elif operation == 'cluster':
-        n_clusters = parameters.get('n_clusters', 3)
-        features = parameters.get('features', [col for col in df.columns if pd.api.types.is_numeric_dtype(df[col])])
         
-        if not features:
-            raise ValueError("No numeric features available for clustering")
-        
-        df[features] = df[features].apply(pd.to_numeric, errors='coerce')
-        df = df.dropna()
-        
-        if df.shape[0] < n_clusters:
-            raise ValueError("Not enough valid data points for clustering")
-        
-        X = df[features].values
-        X = (X - X.mean(axis=0)) / X.std(axis=0)
-        
-        kmeans = KMeans(n_clusters=n_clusters, random_state=42)
-        clusters = kmeans.fit_predict(X)
-        df['cluster'] = clusters
-        
-        plt.figure(figsize=(10, 6))
-        plt.scatter(X[:, 0], X[:, 1], c=clusters, cmap='viridis')
-        plt.xlabel(features[0])
-        plt.ylabel(features[1])
-        plt.title(f'K-Means Clustering (k={n_clusters})')
-        
-        buf = io.BytesIO()
-        plt.savefig(buf, format='png')
-        buf.seek(0)
-        plot_base64 = base64.b64encode(buf.read()).decode('utf-8')
-        plt.close()
-        
-        result = {
-            'cluster_centers': kmeans.cluster_centers_.tolist(),
-            'inertia': kmeans.inertia_,
+        return {
+            'time_column': time_col,
+            'value_columns': value_cols,
+            'frequency': freq,
+            'aggregation': agg_func,
+            'data_points': len(resampled),
+            'start_date': clean_value(resampled.index.min()),
+            'end_date': clean_value(resampled.index.max()),
             'plot': plot_base64,
-            'sample_clusters': df[[features[0], features[1], 'cluster']].head(10).to_dict('records')
+            'sample_data': sample_data
         }
     
-    elif operation == 'pca':
-        n_components = parameters.get('n_components', 2)
-        features = parameters.get('features', [col for col in df.columns if pd.api.types.is_numeric_dtype(df[col])])
+    def _correlation(self, data: Any, params: Dict) -> Dict:
+        """Enhanced correlation analysis with visualization"""
         
-        if not features:
-            raise ValueError("No numeric features available for PCA")
+        df = self._to_dataframe(data)
         
-        df[features] = df[features].apply(pd.to_numeric, errors='coerce')
-        df = df.dropna()
+        # Auto-select numeric columns with NaN handling
+        numeric_cols = [
+            col for col in df.columns 
+            if pd.api.types.is_numeric_dtype(df[col]) 
+            and not df[col].isna().all()  # Exclude all-NA columns
+        ]
         
-        if df.shape[0] < n_components:
-            raise ValueError("Not enough valid data points for PCA")
+        if len(numeric_cols) < 2:
+            raise ValueError("Need at least 2 numeric columns for correlation analysis")
         
-        X = df[features].values
-        X = (X - X.mean(axis=0)) / X.std(axis=0)
+        # Calculate correlation with pairwise complete observations
+        corr_matrix = df[numeric_cols].corr(method='pearson', min_periods=5)
         
-        pca = PCA(n_components=n_components)
-        components = pca.fit_transform(X)
+        # Generate enhanced heatmap
+        plt.switch_backend('Agg')
+        fig, ax = plt.subplots(figsize=(12, 10))
         
-        plt.figure(figsize=(10, 6))
-        plt.scatter(components[:, 0], components[:, 1])
-        plt.xlabel('Principal Component 1')
-        plt.ylabel('Principal Component 2')
-        plt.title('PCA Results')
+        # Use seaborn for better heatmap visualization
+        sns.heatmap(
+            corr_matrix,
+            annot=True,
+            fmt=".2f",
+            cmap='coolwarm',
+            center=0,
+            vmin=-1,
+            vmax=1,
+            square=True,
+            linewidths=0.5,
+            cbar_kws={"shrink": 0.8},
+            ax=ax
+        )
         
+        # Rotate x-axis labels for better readability
+        ax.set_xticklabels(
+            ax.get_xticklabels(),
+            rotation=45,
+            horizontalalignment='right'
+        )
+        
+        ax.set_title("Correlation Matrix Heatmap", pad=20)
+        plt.tight_layout()
+        
+        # Save plot to buffer
         buf = io.BytesIO()
-        plt.savefig(buf, format='png')
+        plt.savefig(buf, format='png', dpi=150, bbox_inches='tight')
         buf.seek(0)
         plot_base64 = base64.b64encode(buf.read()).decode('utf-8')
-        plt.close()
+        plt.close(fig)
         
-        result = {
-            'explained_variance_ratio': pca.explained_variance_ratio_.tolist(),
-            'components': pca.components_.tolist(),
-            'plot': plot_base64
+        # Prepare JSON-safe output
+        def clean_value(v):
+            if pd.isna(v):
+                return None
+            if isinstance(v, (np.floating, float)):
+                return float(v)
+            if isinstance(v, (np.integer, int)):
+                return int(v)
+            return str(v)
+        
+        # Get extreme correlations with proper handling
+        # def format_correlation_pairs(pairs):
+        #     formatted = []
+        #     for pair in pairs:
+        #         if isinstance(pair, dict):
+        #             formatted.append({k: clean_value(v) for k, v in pair.items()})
+        #         elif isinstance(pair, (tuple, list)) and len(pair) == 2:
+        #             formatted.append({
+        #                 'pair': list(pair),
+        #                 'correlation': clean_value(corr_matrix.loc[pair[0], pair[1]])
+        #             })
+        #         elif isinstance(pair, str):
+        #             formatted.append({'column': pair})
+        #     return formatted
+        
+        # Get extreme correlations - now properly formatted
+        extreme_pos = self._get_extreme_correlation(corr_matrix, 'positive')
+        extreme_neg = self._get_extreme_correlation(corr_matrix, 'negative')
+        
+
+        return {
+            'correlation_matrix': {
+                col: {k: clean_value(v) for k, v in row.items()}
+                for col, row in corr_matrix.to_dict().items()
+            },
+            'plot': plot_base64,
+            'strongest_positive': extreme_pos,
+            'strongest_negative': extreme_neg,
+            'numeric_columns_used': numeric_cols,
+            'method': 'pearson',
+            'min_valid_observations': 5,
+            'warnings': [
+                f"{col} has {df[col].isna().sum()} missing values" 
+                for col in numeric_cols 
+                if df[col].isna().any()
+            ] if any(df[col].isna().any() for col in numeric_cols) else None
         }
-    else:
-        raise ValueError(f"Unsupported operation: {operation}")
     
-    return {
-        'operation': operation,
-        'parameters': parameters,
-        'result': result
-    }
+    def _get_extreme_correlation(self, corr_matrix: pd.DataFrame, kind: str) -> List[Dict]:
+        """Helper to find strongest correlations (returns list of dictionaries)"""
+        matrix = corr_matrix.copy()
+        np.fill_diagonal(matrix.values, np.nan)
+        
+        if kind == 'positive':
+            threshold = matrix.stack().quantile(0.95)  # Top 5% positive correlations
+            pairs = matrix.stack()[matrix.stack() >= threshold]
+        else:
+            threshold = matrix.stack().quantile(0.05)  # Bottom 5% negative correlations
+            pairs = matrix.stack()[matrix.stack() <= threshold]
+        
+        # Return sorted list of correlation pairs
+        return [
+            {
+                'column1': col1,
+                'column2': col2,
+                'value': float(corr_value)
+            }
+            for (col1, col2), corr_value in pairs.sort_values(ascending=False).items()
+        ]
+    
+    def _pattern_detect(self, data: Any, params: Dict) -> Dict:
+        """Pattern detection in text/numeric fields"""
+        df = self._to_dataframe(data)
+        patterns = defaultdict(list)
+        
+        # Numeric patterns
+        for col in df.select_dtypes(include=np.number).columns:
+            if (df[col] % 1 == 0).all():
+                patterns['integer_columns'].append(col)
+            if (df[col] > 0).all():
+                patterns['positive_values'].append(col)
+        
+        # Text patterns
+        for col in df.select_dtypes(include='object').columns:
+            if df[col].str.contains(r'\d{4}-\d{2}-\d{2}').any():
+                patterns['date_strings'].append(col)
+            if df[col].str.contains(r'\$?\d+(,\d{3})*(\.\d+)?').any():
+                patterns['currency_strings'].append(col)
+        
+        return {'detected_patterns': dict(patterns)}
+    
+    def _nested_aggregate(self, data: Any, params: Dict) -> Dict:
+        """Handle nested JSON structures with aggregation"""
+        if not isinstance(data, (dict, list)):
+            raise ValueError("Data must be a dictionary or list for nested analysis")
+        
+        # For lists of records
+        if isinstance(data, list) and all(isinstance(x, dict) for x in data):
+            df = pd.json_normalize(data)
+            group_by = params.get('group_by', [col for col in df.columns if df[col].nunique() < 10])
+            
+            if not group_by:
+                return {"message": "No suitable grouping columns found"}
+            
+            agg_results = {}
+            for col in group_by:
+                if col in df.columns:
+                    agg_results[col] = df.groupby(col).size().to_dict()
+            
+            return {'grouped_counts': agg_results}
+        
+        # For deep nested structures
+        elif isinstance(data, dict):
+            flat = self._flatten_data(data)
+            return {
+                'structure_summary': {
+                    'depth': max(len(k.split('.')) for k in flat.keys()),
+                    'field_types': {k: type(v).__name__ for k, v in flat.items()}
+                }
+            }
+        
+        return {"message": "No aggregation performed on simple data"}

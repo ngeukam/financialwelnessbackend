@@ -12,28 +12,113 @@ from collections import Counter
 from wordcloud import WordCloud  # pip install wordcloud
 from sklearn.cluster import KMeans
 from sklearn.decomposition import PCA
+from openpyxl import load_workbook 
+import pdfplumber
+from datetime import datetime
 
 def analyze_data(file_path, operation, parameters):
       # Determine file type
-    if file_path.endswith('.pdf'):
-        return analyze_pdf(file_path, operation, parameters)
-    elif file_path.endswith(('.csv', '.xlsx', '.xls')):
+    if file_path.endswith(('.csv', '.xlsx', '.xls', '.pdf')):
         return analyze_tabular_data(file_path, operation, parameters)
     else:
         raise ValueError("Unsupported file format")
 
 def analyze_tabular_data(file_path, operation, parameters):
-    """Original tabular data analysis functions"""
+    """Enhanced tabular data analysis function with improved PDF and Excel handling"""
+    
     # Read file based on extension
     if file_path.endswith('.csv'):
         df = pd.read_csv(file_path)
-    else:  # Excel
-        df = pd.read_excel(file_path)
+    elif file_path.endswith('.pdf'):
+        # Process PDF with pdfplumber for better table extraction
+        tables = []
+        with pdfplumber.open(file_path) as pdf:
+            for page in pdf.pages:
+                for table in page.extract_tables():
+                    # Convert each table to a DataFrame
+                    df_table = pd.DataFrame(table[1:], columns=table[0])
+                    tables.append(df_table)
+        
+        if not tables:
+            raise ValueError("No tables found in PDF")
+        
+        # For simplicity, we'll use the first table found
+        # In a production environment, you might want to return all tables
+        df = tables[0]
+        
+    elif file_path.endswith(('.xlsx', '.xls')):
+        # Get all sheet names first
+        wb = load_workbook(file_path, read_only=True)
+        sheet_names = wb.sheetnames
+        wb.close()
+        
+        # Filter out empty sheets
+        non_empty_sheets = []
+        for sheet in sheet_names:
+            sheet_df = pd.read_excel(file_path, sheet_name=sheet)
+            if not sheet_df.empty:
+                non_empty_sheets.append({
+                    'sheet_name': sheet,
+                    'dataframe': sheet_df
+                })
+        
+        if not non_empty_sheets:
+            raise ValueError("No data found in any Excel sheet")
+        
+        # For operations that can work with multiple sheets, we might process all
+        # For now, we'll use the first non-empty sheet for compatibility
+        df = non_empty_sheets[0]['dataframe']
+        
+        # Store sheet info in parameters for potential multi-sheet operations
+        parameters['_excel_sheets'] = non_empty_sheets
+    else:
+        raise ValueError("Unsupported file format")
+    
+    # Clean the dataframe by converting numeric columns
+    for col in df.columns:
+        # First try to convert to datetime
+        try:
+            df[col] = pd.to_datetime(df[col], errors='raise', infer_datetime_format=True)
+            continue  # Skip numeric conversion if it's a date
+        except (ValueError, TypeError):
+            pass
+        
+        # Then try to convert to numeric
+        try:
+            # Try converting to float first
+            numeric_vals = pd.to_numeric(df[col], errors='raise')
+            
+            # Check if it's actually integer (all whole numbers)
+            if all(x == int(x) for x in numeric_vals.dropna() if not pd.isna(x)):
+                df[col] = numeric_vals.astype('Int64')  # Using Int64 to handle NaN
+            else:
+                df[col] = numeric_vals
+        except (ValueError, TypeError):
+            # If both conversions fail, leave as string
+            pass
     
     # Perform requested operation
     if operation == 'describe':
-        result = df.describe().to_dict()
+        # For datetime columns, calculate different stats
+        description = df.describe(include='all', datetime_is_numeric=True)
+        
+        # Convert results to JSON-compatible format
+        result = {}
+        for col in description.columns:
+            col_stats = {}
+            for stat, value in description[col].items():
+                if pd.isna(value) or (isinstance(value, (float, int)) and np.isinf(value)):
+                    col_stats[stat] = None
+                elif isinstance(value, (pd.Timestamp, datetime)):
+                    col_stats[stat] = value.isoformat()
+                elif isinstance(value, (np.integer, np.floating)):
+                    col_stats[stat] = int(value) if isinstance(value, np.integer) else float(value)
+                else:
+                    col_stats[stat] = str(value)
+            result[col] = col_stats
+        
         return {'result': result}
+    
     elif operation == 'correlation':
         df = df.apply(pd.to_numeric, errors='coerce')  # Convert all columns to numeric
         df = df.dropna()  # Drop NaNs to avoid issues
@@ -49,6 +134,7 @@ def analyze_tabular_data(file_path, operation, parameters):
         }
         
         return {'result': result}
+    
     elif operation == 'value_counts':
         column = parameters.get('column')
         if not column or column not in df.columns:
@@ -75,6 +161,7 @@ def analyze_tabular_data(file_path, operation, parameters):
             'result': counts,
             'plot': image_base64
         }
+    
     elif operation == 'linear_regression':
         x_col = parameters.get('x_column')
         y_col = parameters.get('y_column')
@@ -126,19 +213,13 @@ def analyze_tabular_data(file_path, operation, parameters):
             'std_err': std_err,
             'plot': plot_base64
         }
-        
-        # else:
-        #     raise ValueError(f"Unsupported operation: {operation}")
-        
-        return {
-                'operation': operation,
-                'parameters': parameters,
-                'result': result
-            }
-
+    
     elif operation == 'cluster':
         n_clusters = parameters.get('n_clusters', 3)
-        features = parameters.get('features', df.columns.tolist())
+        features = parameters.get('features', [col for col in df.columns if pd.api.types.is_numeric_dtype(df[col])])
+        
+        if not features:
+            raise ValueError("No numeric features available for clustering")
         
         df[features] = df[features].apply(pd.to_numeric, errors='coerce')
         df = df.dropna()
@@ -174,7 +255,10 @@ def analyze_tabular_data(file_path, operation, parameters):
     
     elif operation == 'pca':
         n_components = parameters.get('n_components', 2)
-        features = parameters.get('features', df.columns.tolist())
+        features = parameters.get('features', [col for col in df.columns if pd.api.types.is_numeric_dtype(df[col])])
+        
+        if not features:
+            raise ValueError("No numeric features available for PCA")
         
         df[features] = df[features].apply(pd.to_numeric, errors='coerce')
         df = df.dropna()
@@ -213,132 +297,3 @@ def analyze_tabular_data(file_path, operation, parameters):
         'parameters': parameters,
         'result': result
     }
-
-
-def analyze_pdf(file_path, operation, parameters):
-    """PDF-specific analysis functions"""
-    # Read PDF file
-    reader = PdfReader(file_path)
-    text = ""
-    for page in reader.pages:
-        text += page.extract_text()
-    
-    # Perform requested operation
-    if operation == "text_stats":
-        # Basic text statistics
-        words = re.findall(r'\w+', text.lower())
-        word_count = len(words)
-        unique_words = len(set(words))
-        sentences = re.split(r'[.!?]+', text)
-        sentence_count = len([s for s in sentences if len(s.strip()) > 0])
-        
-        # Most common words (excluding stopwords)
-        stopwords = set(['the', 'and', 'to', 'of', 'a', 'in', 'that', 'is', 'it', 'for'])
-        filtered_words = [w for w in words if w not in stopwords and len(w) > 3]
-        common_words = Counter(filtered_words).most_common(10)
-        
-        return {
-            "operation": operation,
-            "result": {
-                "page_count": len(reader.pages),
-                "word_count": word_count,
-                "unique_words": unique_words,
-                "sentence_count": sentence_count,
-                "avg_word_length": sum(len(w) for w in words)/word_count if word_count > 0 else 0,
-                "most_common_words": common_words,
-                "metadata": reader.metadata
-            }
-        }
-    
-    elif operation == "word_cloud":
-        # Generate word cloud
-        wordcloud = WordCloud(width=800, height=400, background_color='white').generate(text)
-        
-        # Save plot to base64
-        plt.figure(figsize=(10, 5))
-        plt.imshow(wordcloud, interpolation='bilinear')
-        plt.axis("off")
-        
-        buf = io.BytesIO()
-        plt.savefig(buf, format='png')
-        buf.seek(0)
-        plot_base64 = base64.b64encode(buf.read()).decode('utf-8')
-        plt.close()
-        
-        return {
-            "operation": operation,
-            "result": {
-                "word_cloud": plot_base64
-            }
-        }
-    
-    elif operation == "search_text":
-        # Search for specific text patterns
-        search_term = parameters.get('search_term', '')
-        if not search_term:
-            raise ValueError("search_term parameter is required")
-        
-        # Case insensitive search
-        pattern = re.compile(re.escape(search_term), re.IGNORECASE)
-        matches = pattern.findall(text)
-        
-        # Find context around matches
-        contexts = []
-        for match in set(matches):  # unique matches only
-            for m in re.finditer(re.escape(match), text, re.IGNORECASE):
-                start = max(0, m.start() - 20)
-                end = min(len(text), m.end() + 20)
-                contexts.append({
-                    "match": match,
-                    "context": text[start:end].replace('\n', ' '),
-                    "page": "Unknown"  # Could be enhanced to track pages
-                })
-        
-        return {
-            "operation": operation,
-            "result": {
-                "search_term": search_term,
-                "total_matches": len(matches),
-                "unique_matches": len(set(matches)),
-                "sample_contexts": contexts[:5]  # Return first 5 for preview
-            }
-        }
-    
-    elif operation == "extract_tables":
-        # Attempt to extract tabular data from PDF
-        try:
-            import pdfplumber  # pip install pdfplumber
-            tables = []
-            
-            with pdfplumber.open(file_path) as pdf:
-                for i, page in enumerate(pdf.pages):
-                    page_tables = page.extract_tables()
-                    for table in page_tables:
-                        # Clean table data
-                        cleaned_table = []
-                        for row in table:
-                            cleaned_row = [str(cell).strip() if cell is not None else '' for cell in row]
-                            cleaned_table.append(cleaned_row)
-                        
-                        if len(cleaned_table) > 1:  # Skip empty tables
-                            tables.append({
-                                "page": i + 1,
-                                "table": cleaned_table,
-                                "dimensions": f"{len(cleaned_table)} rows × {len(cleaned_table[0])} cols"
-                            })
-            
-            return {
-                "operation": operation,
-                "result": {
-                    "tables_found": len(tables),
-                    "tables": tables[:3]  # Return first 3 tables for preview
-                }
-            }
-        except ImportError:
-            return {
-                "operation": operation,
-                "error": "pdfplumber package required for table extraction"
-            }
-    
-    else:
-        raise ValueError(f"Unsupported PDF operation: {operation}")

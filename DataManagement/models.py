@@ -27,5 +27,6 @@ class DataFile(models.Model):
         related_name='data_files'
     )
     file = models.FileField(upload_to='DataFiles/')  # or ImageField if only images
+    processed_data = models.JSONField(blank=True, null=True)
     file_type = models.CharField(max_length=50, blank=True, null=True)
     uploaded_at = models.DateTimeField(auto_now_add=True)

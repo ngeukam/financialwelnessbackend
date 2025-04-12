@@ -22,15 +22,15 @@ class Command(BaseCommand):
         # Define module data
         modules_data = [
             {"key": "dashboard", "module_name": "Dashboard", "module_icon": "Dashboard", "is_menu": True, "module_url": "", "parent_key": None},
-            {"key": "finance", "module_name": "Personal Finance", "module_icon": "attendance", "is_menu": True, "module_url": "", "parent_key": None},
-            {"key": "data", "module_name": "Data Management", "module_icon": "attendance", "is_menu": True, "module_url": "manage/data", "parent_key": None},
+            {"key": "finance", "module_name": "Personal Finance", "module_icon": "Finance", "is_menu": True, "module_url": "", "parent_key": None},
+            {"key": "data", "module_name": "Data Management", "module_icon": "Wharehouse", "is_menu": True, "module_url": "manage/data", "parent_key": None},
             {"key": "users", "module_name": "Users Management", "module_icon": "attendance", "is_menu": True, "module_url": "", "parent_key": None},
                        
             {"key": "goal", "module_name": "Create Goal", "module_icon": "attendance", "is_menu": False, "module_url": "/create/goal ", "parent_key": "finance"},
 
             {"key": "wallet", "module_name": "Wallet", "module_icon": "Wallet", "is_menu": True, "module_url": "pf/wallet", "parent_key": "finance"},            
             {"key": "cat_mgmt", "module_name": "Categories Management", "module_icon": "Category", "is_menu": True, "module_url": "pf/manage/category", "parent_key": "finance"},
-            {"key": "fin_mgmt", "module_name": "Finance Management", "module_icon": "Coins", "is_menu": True, "module_url": "pf/manage/finance", "parent_key": "finance"},
+            {"key": "fin_mgmt", "module_name": "Finance Management", "module_icon": "Money", "is_menu": True, "module_url": "pf/manage/finance", "parent_key": "finance"},
 
 
             {"key": "users_list", "module_name": "Users List", "module_icon": "Dashboard", "is_menu": True, "module_url": "/manage/users", "parent_key": "users"},

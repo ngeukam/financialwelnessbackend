@@ -70,51 +70,149 @@ class UniversalJSONAnalyzer:
         return pd.DataFrame(data)
                 
     def _describe(self, data: Any, params: Dict) -> Dict:
-        """Statistical description of all fields with NaN handling"""
+        """Statistical description of all fields with robust NaN handling and enhanced statistics"""
         df = self._to_dataframe(data)
         
-        # Convert NaN values to None (which becomes null in JSON)
         def clean_value(v):
-            if pd.isna(v):
+            if pd.isna(v) or v is None:
                 return None
             if isinstance(v, (np.floating, float)):
-                return float(v)
+                return float(round(v, 4))
             if isinstance(v, (np.integer, int)):
                 return int(v)
-            return v
+            if isinstance(v, (pd.Timestamp, np.datetime64)):
+                return v.isoformat()
+            if isinstance(v, (list, tuple, np.ndarray)):
+                return [clean_value(x) for x in v]
+            return str(v)
         
         stats = {}
         for col in df.columns:
             col_stats = {}
             dtype = str(df[col].dtype)
+            non_null_count = len(df[col]) - df[col].isna().sum()
             
+            # Common stats for all types
+            col_stats.update({
+                'dtype': dtype,
+                'total_count': len(df[col]),
+                'null_count': int(df[col].isna().sum()),
+                'non_null_count': int(non_null_count),
+                'null_percentage': round(float(df[col].isna().mean() * 100), 2)
+            })
+            
+            # Numeric columns
             if pd.api.types.is_numeric_dtype(df[col]):
                 col_stats.update({
                     'type': 'numeric',
                     'min': clean_value(df[col].min()),
                     'max': clean_value(df[col].max()),
                     'mean': clean_value(df[col].mean()),
+                    'median': clean_value(df[col].median()),
                     'std': clean_value(df[col].std()),
-                    'null_count': int(df[col].isna().sum())
+                    'variance': clean_value(df[col].var()),
+                    'skewness': clean_value(df[col].skew()),
+                    'kurtosis': clean_value(df[col].kurt()),
+                    'quartiles': {
+                        'q1': clean_value(df[col].quantile(0.25)),
+                        'q2': clean_value(df[col].quantile(0.5)),
+                        'q3': clean_value(df[col].quantile(0.75))
+                    }
                 })
+                
+                # Add histogram data for numeric columns
+                if non_null_count > 0:
+                    try:
+                        hist, bins = np.histogram(df[col].dropna(), bins=10)
+                        col_stats['histogram'] = {
+                            'bins': clean_value(bins.tolist()),
+                            'counts': clean_value(hist.tolist())
+                        }
+                    except Exception as e:
+                        col_stats['histogram'] = f"Error calculating histogram: {str(e)}"
+            
+            # Datetime columns
             elif pd.api.types.is_datetime64_any_dtype(df[col]):
                 col_stats.update({
                     'type': 'datetime',
                     'min': clean_value(df[col].min()),
                     'max': clean_value(df[col].max()),
-                    'null_count': int(df[col].isna().sum())
-                })
-            else:
-                col_stats.update({
-                    'type': 'categorical',
-                    'unique_values': int(df[col].nunique()),
-                    'top_value': clean_value(df[col].mode().iloc[0]) if not df[col].empty else None,
-                    'null_count': int(df[col].isna().sum())
+                    'range_days': clean_value((df[col].max() - df[col].min()).days),
+                    'weekday_counts': clean_value(df[col].dt.weekday.value_counts().to_dict())
                 })
             
-            stats[col] = {'dtype': dtype, **col_stats}
+            # Categorical/string columns
+            else:
+                try:
+                    # Handle mixed types by converting to string first
+                    str_series = df[col].astype(str)
+                    value_counts = str_series.value_counts()
+                    
+                    if not value_counts.empty:
+                        top_value = value_counts.index[0]
+                        # Use .iloc[0] to safely get the first value
+                        top_freq = value_counts.iloc[0]
+                        
+                        # Calculate frequency percentage safely
+                        freq_pct = None
+                        if non_null_count > 0:
+                            freq_pct = round((top_freq / non_null_count * 100), 2)
+                        
+                        col_stats.update({
+                            'type': 'categorical',
+                            'unique_values': int(str_series.nunique()),
+                            'top_value': clean_value(top_value),
+                            'top_frequency': int(top_freq),
+                            'top_frequency_percentage': clean_value(freq_pct),
+                            'value_counts': clean_value(
+                                value_counts.head(10).to_dict()
+                            )
+                        })
+                    else:
+                        col_stats.update({
+                            'type': 'categorical',
+                            'unique_values': 0,
+                            'top_value': None,
+                            'top_frequency': None,
+                            'top_frequency_percentage': None,
+                            'value_counts': {}
+                        })
+                except Exception as e:
+                    col_stats.update({
+                        'type': 'categorical',
+                        'unique_values': 'error',
+                        'top_value': 'error',
+                        'top_frequency': 'error',
+                        'top_frequency_percentage': 'error',
+                        'value_counts': 'error',
+                        'error_message': str(e)
+                    })
+            
+            stats[col] = col_stats
         
-        return {'statistics': stats}
+        # Add correlation matrix for numeric columns
+        numeric_cols = [col for col in df.columns if pd.api.types.is_numeric_dtype(df[col])]
+        if len(numeric_cols) > 1:
+            try:
+                stats['_correlations'] = clean_value(
+                    df[numeric_cols].corr().round(4).to_dict()
+                )
+            except Exception as e:
+                stats['_correlations'] = f"Error calculating correlations: {str(e)}"
+        
+        return {
+            'statistics': stats,
+            'metadata': {
+                'total_columns': len(df.columns),
+                'total_rows': len(df),
+                'numeric_columns': len(numeric_cols),
+                'datetime_columns': len([col for col in df.columns 
+                                    if pd.api.types.is_datetime64_any_dtype(df[col])]),
+                'categorical_columns': len(df.columns) - len(numeric_cols) - 
+                                    len([col for col in df.columns 
+                                        if pd.api.types.is_datetime64_any_dtype(df[col])])
+            }
+        }
     
     def _value_counts(self, data: Any, params: Dict) -> Dict:
         """Frequency analysis with visualization"""
@@ -146,20 +244,18 @@ class UniversalJSONAnalyzer:
     
     def _time_series(self, data: Any, params: Dict) -> Dict:
         """Temporal analysis with robust datetime handling and visualization"""
-        # Configure matplotlib to use non-interactive backend
-        
         df = self._to_dataframe(data)
         
-        # Common datetime formats to try (order by likelihood)
+        # Common datetime formats
         DATETIME_FORMATS = [
-            '%Y-%m-%d', '%m/%d/%Y', '%d/%m/%Y',   # Dates
-            '%Y-%m-%d %H:%M:%S', '%m/%d/%Y %H:%M', # Date-times
-            '%Y%m%d', '%d%m%Y',                    # Compact dates
-            '%Y-%m-%dT%H:%M:%S',                   # ISO format
-            '%Y-%m-%d %H:%M:%S.%f'                 # With microseconds
+            '%Y-%m-%d', '%m/%d/%Y', '%d/%m/%Y',
+            '%Y-%m-%d %H:%M:%S', '%m/%d/%Y %H:%M',
+            '%Y%m%d', '%d%m%Y',
+            '%Y-%m-%dT%H:%M:%S',
+            '%Y-%m-%d %H:%M:%S.%f'
         ]
         
-        # Auto-detect time column if not specified
+        # Handle date column
         time_col = params.get('date_column')
         if not time_col:
             for col in df.columns:
@@ -180,67 +276,138 @@ class UniversalJSONAnalyzer:
                         break
         
         if not time_col:
-            raise ValueError("No valid datetime column found or specifed")
+            raise ValueError("No valid datetime column found or specified")
         
-        # Ensure proper datetime type
         if not pd.api.types.is_datetime64_any_dtype(df[time_col]):
             df[time_col] = pd.to_datetime(df[time_col], errors='coerce')
         
-        # Auto-detect value columns if not specified
-        value_cols = params.get('value_columns')
-        if not value_cols:
-            value_cols = [
-                col for col in df.columns 
+        # Handle value column
+        value_col = params.get('value_column')
+        if not value_col:
+            value_col = next(
+                (col for col in df.columns 
                 if pd.api.types.is_numeric_dtype(df[col]) 
-                and col != time_col
-            ]
-        
-        if not value_cols:
-            raise ValueError("No numeric columns found for analysis")
-        
-        # Set default aggregation if not specified
-        agg_func = params.get('agg_function', 'mean')
-        
-        # Resample time series with forward-fill for missing periods
-        freq = params.get('frequency', 'D')  # Daily by default
-        resampled = (
-            df.set_index(time_col)[value_cols]
-            .resample(freq)
-            .agg(agg_func)
-            .ffill()  # Forward fill missing values
-        )
-        
-        # Generate plot with improved styling
-        plt.switch_backend('Agg')
-        fig, ax = plt.subplots(figsize=(12, 6))
-        
-        for col in value_cols:
-            ax.plot(
-                resampled.index,
-                resampled[col],
-                label=col,
-                marker='o',
-                markersize=4,
-                linewidth=1.5,
-                alpha=0.8
+                and col != time_col),
+                None
             )
         
-        ax.set_title(f"Time Series Analysis ({freq} frequency)", pad=20)
-        ax.set_xlabel(time_col, labelpad=10)
-        ax.set_ylabel("Value", labelpad=10)
-        ax.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
+        if not value_col:
+            raise ValueError("No numeric column found for analysis")
+        
+        # Get parameters
+        agg_func = params.get('agg_function', 'sum')
+        freq = params.get('frequency', 'D')
+        
+        # Resample data
+        resampled = (
+            df.set_index(time_col)[[value_col]]
+            .resample(freq)
+            .agg(agg_func)
+            .ffill()
+        )
+        
+        # Create plot with larger fonts
+        plt.switch_backend('Agg')
+        fig, ax = plt.subplots(figsize=(14, 8))  # Larger figure size
+        
+        # Set font sizes
+        title_fontsize = 16
+        axis_label_fontsize = 14
+        tick_label_fontsize = 12
+        annotation_fontsize = 16
+        
+        line, = ax.plot(
+            resampled.index,
+            resampled[value_col],
+            label=value_col,
+            marker='o',
+            markersize=6,  # Slightly larger markers
+            linewidth=2,
+            alpha=0.8
+        )
+        
+        # Configure title and labels with larger fonts
+        ax.set_title(
+            f"Time Series Analysis - {agg_func} of {value_col} ({freq} frequency)", 
+            pad=20,
+            fontsize=title_fontsize,
+            fontweight='bold'
+        )
+        ax.set_xlabel(
+            time_col, 
+            labelpad=15,
+            fontsize=axis_label_fontsize,
+            fontweight='bold'
+        )
+        ax.set_ylabel(
+            f"{agg_func} of {value_col}", 
+            labelpad=15,
+            fontsize=axis_label_fontsize,
+            fontweight='bold'
+        )
+        
+        # Configure tick labels
+        ax.tick_params(axis='both', which='major', labelsize=tick_label_fontsize)
         ax.grid(True, alpha=0.3)
-        fig.autofmt_xdate()
+        
+        # Add value annotations
+        for i, (date, val) in enumerate(zip(resampled.index, resampled[value_col])):
+            if i % max(1, len(resampled)//10) == 0:
+                ax.annotate(
+                    f"{val:.2f}",
+                    (date, val),
+                    textcoords="offset points",
+                    xytext=(0,8),
+                    ha='center',
+                    fontsize=annotation_fontsize,
+                    bbox=dict(boxstyle='round,pad=0.2', fc='white', alpha=0.7)
+                )
+        
+        # Interactive hover effect
+        annot = ax.annotate(
+            "", xy=(0,0), 
+            xytext=(20,20),
+            textcoords="offset points",
+            bbox=dict(boxstyle="round", fc="w", alpha=0.9),
+            arrowprops=dict(arrowstyle="->"),
+            fontsize=annotation_fontsize
+        )
+        annot.set_visible(False)
+        
+        def update_annot(ind):
+            x, y = line.get_data()
+            date = pd.to_datetime(x[ind["ind"][0]])
+            value = y[ind["ind"][0]]
+            annot.xy = (x[ind["ind"][0]], y[ind["ind"][0]])
+            annot.set_text(f"Date: {date.strftime('%Y-%m-%d')}\nValue: {value:.2f}")
+        
+        def hover(event):
+            vis = annot.get_visible()
+            if event.inaxes == ax:
+                cont, ind = line.contains(event)
+                if cont:
+                    update_annot(ind)
+                    annot.set_visible(True)
+                    fig.canvas.draw_idle()
+                else:
+                    if vis:
+                        annot.set_visible(False)
+                        fig.canvas.draw_idle()
+        
+        fig.canvas.mpl_connect("motion_notify_event", hover)
+        
+        # Rotate and adjust x-axis labels
+        fig.autofmt_xdate(rotation=45, ha='right')
         plt.tight_layout()
         
-        # Save plot to buffer
+        # Save plot
         buf = io.BytesIO()
         plt.savefig(buf, format='png', dpi=150, bbox_inches='tight')
         buf.seek(0)
         plot_base64 = base64.b64encode(buf.read()).decode('utf-8')
         plt.close(fig)
         
-        # Prepare JSON-safe output
+        # Prepare output
         def clean_value(v):
             if pd.isna(v):
                 return None
@@ -252,24 +419,23 @@ class UniversalJSONAnalyzer:
                 return v.isoformat()
             return str(v)
         
-        sample_data = {
-            time_col: [clean_value(x) for x in resampled.index[:10]],
-            **{
-                col: [clean_value(x) for x in resampled[col][:10]]
-                for col in value_cols
-            }
-        }
-        
         return {
             'time_column': time_col,
-            'value_columns': value_cols,
+            'value_column': value_col,
             'frequency': freq,
-            'aggregation': agg_func,
+            'aggregation_function': agg_func,
             'data_points': len(resampled),
             'start_date': clean_value(resampled.index.min()),
             'end_date': clean_value(resampled.index.max()),
             'plot': plot_base64,
-            'sample_data': sample_data
+            'stats': {
+                'mean': float(resampled[value_col].mean()),
+                'median': float(resampled[value_col].median()),
+                'min': float(resampled[value_col].min()),
+                'max': float(resampled[value_col].max()),
+                'std_dev': float(resampled[value_col].std()),
+                'total': float(resampled[value_col].sum())
+            }
         }
     
     def _correlation(self, data: Any, params: Dict) -> Dict:
@@ -418,24 +584,118 @@ class UniversalJSONAnalyzer:
         return {'detected_patterns': dict(patterns)}
     
     def _nested_aggregate(self, data: Any, params: Dict) -> Dict:
-        """Handle nested JSON structures with aggregation"""
+        """Enhanced nested aggregation with multiple aggregation functions"""
         if not isinstance(data, (dict, list)):
             raise ValueError("Data must be a dictionary or list for nested analysis")
-        
-        # For lists of records
+
+        # For tabular data (list of records)
         if isinstance(data, list) and all(isinstance(x, dict) for x in data):
             df = pd.json_normalize(data)
-            group_by = params.get('group_by', [col for col in df.columns if df[col].nunique() < 10])
             
+            # Get parameters with defaults
+            group_by = params.get('group_by', [])
+            agg_columns = params.get('agg_columns', [
+                col for col in df.columns 
+                if pd.api.types.is_numeric_dtype(df[col])
+            ])
+            agg_functions = params.get('agg_functions', ['mean'])
+            
+            # Validate inputs
             if not group_by:
-                return {"message": "No suitable grouping columns found"}
+                group_by = [col for col in df.columns if df[col].nunique() < 10]
+                if not group_by:
+                    return {"error": "No suitable grouping columns found"}
             
-            agg_results = {}
-            for col in group_by:
-                if col in df.columns:
-                    agg_results[col] = df.groupby(col).size().to_dict()
+            if not agg_columns:
+                return {"error": "No numeric columns available for aggregation"}
             
-            return {'grouped_counts': agg_results}
+            # Perform aggregations
+            results = {}
+            plots = []
+            
+            for func in agg_functions:
+                try:
+                    agg_result = df.groupby(group_by)[agg_columns].agg(func)
+                    results[func] = agg_result.reset_index().to_dict('records')
+                    
+                    # Generate visualization for the first 3 columns
+                    if len(agg_columns) > 0 and len(group_by) > 0:
+                        for i, col in enumerate(agg_columns[:3]):
+                            plt.switch_backend('Agg')
+                            fig, ax = plt.subplots(figsize=(10, 6))
+                            
+                            # Prepare data for plotting
+                            groups = agg_result.index.tolist()
+                            values = agg_result[col].values
+                            
+                            # Convert groups to strings if they aren't already
+                            group_labels = [str(g[:20]) for g in groups]
+                            
+                            # Create bar plot
+                            bars = ax.bar(group_labels, values)
+                            
+                            # Add title and labels
+                            ax.set_title(f"{func.title()} of {col} by {group_by[0]}")
+                            ax.set_xlabel(group_by[0])
+                            ax.set_ylabel(col)
+                            plt.xticks(rotation=45)
+                            
+                            # Add values on top of bars
+                            for bar in bars:
+                                height = bar.get_height()
+                                ax.text(bar.get_x() + bar.get_width()/2., height + 0.01 * height,
+                                        f'{height:.2f}',
+                                        ha='center', va='bottom')
+                            
+                            # Add interactive hover effect
+                            def format_tooltip(bar):
+                                return f"{group_by[0]}: {group_labels[int(bar.get_x() + bar.get_width()/2)]}\nValue: {bar.get_height():.2f}"
+                            
+                            annot = ax.annotate("", xy=(0,0), xytext=(20,20),
+                                            textcoords="offset points",
+                                            bbox=dict(boxstyle="round", fc="w"),
+                                            arrowprops=dict(arrowstyle="->"))
+                            annot.set_visible(False)
+                            
+                            def update_annot(bar):
+                                annot.xy = (bar.get_x() + bar.get_width()/2, bar.get_height())
+                                annot.set_text(format_tooltip(bar))
+                                annot.get_bbox_patch().set_alpha(0.8)
+                            
+                            def hover(event):
+                                vis = annot.get_visible()
+                                if event.inaxes == ax:
+                                    for bar in bars:
+                                        cont, ind = bar.contains(event)
+                                        if cont:
+                                            update_annot(bar)
+                                            annot.set_visible(True)
+                                            fig.canvas.draw_idle()
+                                            return
+                                if vis:
+                                    annot.set_visible(False)
+                                    fig.canvas.draw_idle()
+                            
+                            fig.canvas.mpl_connect("motion_notify_event", hover)
+                            
+                            buf = io.BytesIO()
+                            plt.savefig(buf, format='png', bbox_inches='tight', dpi=100)
+                            buf.seek(0)
+                            plot_base64 = base64.b64encode(buf.read()).decode('utf-8')
+                            plt.close()
+                            
+                            plots.append({
+                                'function': func,
+                                'column': col,
+                                'group_by': group_by,
+                                'agg_columns': agg_columns,
+                                'results': results,
+                                'plot': plot_base64
+                            })
+                except Exception as e:
+                    results[func] = f"Aggregation failed: {str(e)}"
+            
+            return plots[0]
         
         # For deep nested structures
         elif isinstance(data, dict):
@@ -443,8 +703,21 @@ class UniversalJSONAnalyzer:
             return {
                 'structure_summary': {
                     'depth': max(len(k.split('.')) for k in flat.keys()),
-                    'field_types': {k: type(v).__name__ for k, v in flat.items()}
+                    'field_types': {k: type(v).__name__ for k, v in flat.items()},
+                    'sample_values': {k: v for i, (k, v) in enumerate(flat.items()) if i < 5}
                 }
             }
         
         return {"message": "No aggregation performed on simple data"}
+
+
+    def _flatten_data(self, data: Dict, parent_key: str = '', sep: str = '.') -> Dict:
+        """Flatten nested dictionary structure"""
+        items = {}
+        for k, v in data.items():
+            new_key = f"{parent_key}{sep}{k}" if parent_key else k
+            if isinstance(v, dict):
+                items.update(self._flatten_data(v, new_key, sep=sep))
+            else:
+                items[new_key] = v
+        return items

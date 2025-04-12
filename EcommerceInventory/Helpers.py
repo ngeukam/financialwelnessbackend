@@ -14,10 +14,13 @@ import json
 
 def getDynamicFormModels():
     return {
-        'product':'ProductServices.Products',
-        'category':'ProductServices.Categories',
-        'warehouse':'InventoryServices.Warehouse',
-        'supplier':'UserServices.Users',
+        # 'product':'ProductServices.Products',
+        'category':'PersonalFinance.Categories',
+        'income':'PersonalFinance.Incomes',
+        'expense':'PersonalFinance.Expenses',
+        'goal':'PersonalFinance.Goals',
+        # 'warehouse':'InventoryServices.Warehouse',
+        # 'supplier':'UserServices.Users',
         'rackShelfFloor':'InventoryServices.RackAndShelvesAndFloor',
         'users':'UserServices.Users',
     }

@@ -14,12 +14,4 @@ urlpatterns = [
     path('data-files/',DataFileListView.as_view(),name='data_files'),
     path('data-analysis/<int:file_id>/',DataAnalysisAPIView.as_view(),name='data_analysis'),
 
-
-    
-
-
-
-
-
-
 ]

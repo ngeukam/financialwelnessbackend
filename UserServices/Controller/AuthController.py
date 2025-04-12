@@ -37,6 +37,7 @@ class SignupAPIView(APIView):
         access['username'] = user.username
         access['email'] = user.email
         access['profile_pic'] = user.profile_pic
+        access['currency'] = user.currency
 
         return Response({'access':str(access),'refresh':str(refresh),'message':'User Created Successfully'},status=status.HTTP_201_CREATED)
 
@@ -55,6 +56,7 @@ class LoginAPIView(APIView):
             access['username'] = user.username
             access['email'] = user.email
             access['profile_pic'] = user.profile_pic
+            access['currency'] = user.currency
 
             return Response({
                 'refresh': str(refresh),

@@ -21,112 +21,65 @@ class Command(BaseCommand):
         self.stdout.write(self.style.SUCCESS('Database reset completed.'))
         # Define module data
         modules_data = [
-            {"module_name": "Dashboard", "module_icon": "Dashboard", "is_menu": True, "module_url": "", "parent_id": None},
-            {"module_name": "Inventaire", "module_icon": "Inventory", "is_menu": True, "module_url": "", "parent_id": None},
-            {"module_name": "Fournisseurs", "module_icon": "AccountCircle", "is_menu": True, "module_url": "", "parent_id": None},
-            {"module_name": "Achats", "module_icon": "Store", "is_menu": True, "module_url": "", "parent_id": None},
-            {"module_name": "Ventes", "module_icon": "Retail", "is_menu": True, "module_url": "", "parent_id": None},
-            {"module_name": "Emplacements", "module_icon": "Location", "is_menu": True, "module_url": "", "parent_id": None},
-            {"module_name": "Catégories", "module_icon": "Category", "is_menu": True, "module_url": "", "parent_id": None},
-            {"module_name": "Produits", "module_icon": "Redeem", "is_menu": True, "module_url": "", "parent_id": None},
-            {"module_name": "Gestion des Utilisateurs", "module_icon": "attendance", "is_menu": True, "module_url": "", "parent_id": None},
+            {"key": "dashboard", "module_name": "Dashboard", "module_icon": "Dashboard", "is_menu": True, "module_url": "", "parent_key": None},
+            {"key": "finance", "module_name": "Personal Finance", "module_icon": "attendance", "is_menu": True, "module_url": "", "parent_key": None},
+            {"key": "data", "module_name": "Data Management", "module_icon": "attendance", "is_menu": True, "module_url": "manage/data", "parent_key": None},
+            {"key": "users", "module_name": "Users Management", "module_icon": "attendance", "is_menu": True, "module_url": "", "parent_key": None},
+                       
+            {"key": "goal", "module_name": "Create Goal", "module_icon": "attendance", "is_menu": False, "module_url": "/create/goal ", "parent_key": "finance"},
 
-            {"module_name": "Gestion inventaires", "module_icon": "Dashboard", "is_menu": True, "module_url": "/manage/invetory", "parent_id": 2},
-            {"module_name": "Ajouter un inventaire", "module_icon": "Add", "is_menu": True, "module_url": "/form/stock", "parent_id": 2},
-             
-            {"module_name": "Gestion des fournisseurs", "module_icon": "Dashboard", "is_menu": True, "module_url": "/manage/suppliers", "parent_id": 3},
-            {"module_name": "Ajouter un fournisseur", "module_icon": "Add", "is_menu": True, "module_url": "/form/users", "parent_id": 3},
+            {"key": "wallet", "module_name": "Wallet", "module_icon": "Wallet", "is_menu": True, "module_url": "pf/wallet", "parent_key": "finance"},            
+            {"key": "cat_mgmt", "module_name": "Categories Management", "module_icon": "Category", "is_menu": True, "module_url": "pf/manage/category", "parent_key": "finance"},
+            {"key": "fin_mgmt", "module_name": "Finance Management", "module_icon": "Coins", "is_menu": True, "module_url": "pf/manage/finance", "parent_key": "finance"},
 
-            {"module_name": "Gestion des achats", "module_icon": "Dashboard", "is_menu": True, "module_url": "/manage/purchaseorder", "parent_id": 4},
-            {"module_name": "Ajouter un achat", "module_icon": "Add", "is_menu": True, "module_url": "/create/po", "parent_id": 4},
 
-            {"module_name": "Gestion des ventes", "module_icon": "Dashboard", "is_menu": True, "module_url": "", "parent_id": 5},
-            {"module_name": "Ajouter une vente", "module_icon": "Add", "is_menu": True, "module_url": "/form/sale", "parent_id": 5},
-
-            {"module_name": "Gestion des emplacements", "module_icon": "Dashboard", "is_menu": True, "module_url": "/manage/location", "parent_id": 6},
-            {"module_name": "Ajouter un emplacement", "module_icon": "Add", "is_menu": True, "module_url": "/form/location", "parent_id": 6},
+            {"key": "users_list", "module_name": "Users List", "module_icon": "Dashboard", "is_menu": True, "module_url": "/manage/users", "parent_key": "users"},
+            {"key": "users_add", "module_name": "Add User", "module_icon": "Add", "is_menu": True, "module_url": "/form/users", "parent_key": "users"},
             
-            {"module_name": "Gestion des catégories", "module_icon": "Dashboard", "is_menu": True, "module_url": "/manage/categories", "parent_id": 7},
-            {"module_name": "Ajouter une catégorie", "module_icon": "Add", "is_menu": True, "module_url": "/form/category", "parent_id": 7},
-            
-            {"module_name": "Gestion des produits", "module_icon": "Dashboard", "is_menu": True, "module_url": "/manage/product", "parent_id": 8},
-            {"module_name": "Ajouter un produit", "module_icon": "Add", "is_menu": True, "module_url": "/form/product", "parent_id": 8},
-            
-            {"module_name": "Gestion des utilisateurs", "module_icon": "Dashboard", "is_menu": True, "module_url": "/manage/users", "parent_id": 9},
-            {"module_name": "Ajouter un utilisateur", "module_icon": "Add", "is_menu": True, "module_url": "/form/users", "parent_id": 9},
-            
-            {"module_name": "getMenus", "module_icon": "attendance", "is_menu": False, "module_url": "", "parent_id": None},
-            {"module_name": "Transactions", "module_icon": "attendance", "is_menu": False, "module_url": "", "parent_id": None},
-            {"module_name": "Products", "module_icon": "attendance", "is_menu": False, "module_url": "", "parent_id": None},
-            {"module_name": "Auth", "module_icon": "attendance", "is_menu": False, "module_url": "", "parent_id": None},
-            {"module_name": "Inventory", "module_icon": "attendance", "is_menu": False, "module_url": "", "parent_id": None},
-            {"module_name": "getForm", "module_icon": "attendance", "is_menu": False, "module_url": "", "parent_id": None},
-            
-            {"module_name": "Gestion des modules", "module_icon": "attendance", "is_menu": True, "module_url": "", "parent_id": None},
-
+            {"key": "get_menus", "module_name": "getMenus", "module_icon": "attendance", "is_menu": False, "module_url": "", "parent_key": None},
+            {"key": "transactions", "module_name": "Transactions", "module_icon": "attendance", "is_menu": False, "module_url": "", "parent_key": None},
+            {"key": "products", "module_name": "Products", "module_icon": "attendance", "is_menu": False, "module_url": "", "parent_key": None},
+            {"key": "auth", "module_name": "Auth", "module_icon": "attendance", "is_menu": False, "module_url": "", "parent_key": None},
+            {"key": "inventory", "module_name": "Inventory", "module_icon": "attendance", "is_menu": False, "module_url": "", "parent_key": None},
+            {"key": "get_form", "module_name": "getForm", "module_icon": "attendance", "is_menu": False, "module_url": "", "parent_key": None},
         ]
 
-        modules = {}  # Stocker les modules par ID pour les références des enfants
+
+        modules = {}
 
         for data in modules_data:
-            parent_id = data.pop("parent_id")  # Récupérer l'ID du parent et le retirer du dictionnaire
-
-            # Si un parent_id est défini, récupérer son instance
-            parent_instance = modules.get(parent_id) if parent_id else None
-
-            # Créer le module avec l'instance du parent
+            key = data.pop("key")
+            parent_key = data.pop("parent_key")
+            parent_instance = modules.get(parent_key) if parent_key else None
             module = Modules.objects.create(parent_id=parent_instance, **data)
+            modules[key] = module
 
-            # Stocker l'instance dans le dictionnaire avec son ID
-            modules[module.id] = module
 
         
         self.stdout.write(self.style.SUCCESS('Modules created successfully.'))
 
         # Define module URLs
         module_urls_data = [
-            {"module": modules[1], "url": "/"},
-            {"module": modules[2], "url": ""},
-            {"module": modules[3], "url": ""},
-            {"module": modules[4], "url": ""},
-            {"module": modules[5], "url": ""},
-            {"module": modules[6], "url": ""},
-            {"module": modules[7], "url": ""},
-            {"module": modules[8], "url": ""},
-            {"module": modules[9], "url": ""},
-            
-            {"module": modules[10], "url": ""},
-            {"module": modules[11], "url": ""},
-            
-            {"module": modules[12], "url": ""},
-            {"module": modules[13], "url": ""},
-            
-            {"module": modules[14], "url": ""},
-            {"module": modules[14], "url": ""},
-            
-            {"module": modules[16], "url": ""},
-            {"module": modules[17], "url": ""},
-            
-            {"module": modules[18], "url": ""},
-            {"module": modules[19], "url": ""},
-            
-            {"module": modules[20], "url": ""},
-            {"module": modules[21], "url": ""},
-            
-            {"module": modules[22], "url": ""},
-            {"module": modules[23], "url": ""},
-            
-            {"module": modules[24], "url": ""},
-            {"module": modules[25], "url": ""},
-            
-            {"module": modules[26], "url": "api/v1/getMenus/"},
-            {"module": modules[27], "url": "api/v1/transactions/"},
-            {"module": modules[28], "url": "api/v1/products/"},
-            {"module": modules[29], "url": "api/v1/auth/"},
-            {"module": modules[30], "url": "api/v1/inventory/"},
-            {"module": modules[31], "url": "api/v1/getForm/"},
-            {"module": modules[32], "url": "api/v1/superAdminForm/*/"},
+            {"module": modules["dashboard"], "url": "/"},
+            {"module": modules["finance"], "url": ""},
+            {"module": modules["data"], "url": ""},
+            {"module": modules["users"], "url": ""},
+            {"module": modules["goal"], "url": ""},
+            {"module": modules["cat_mgmt"], "url": ""},
+            {"module": modules["fin_mgmt"], "url": ""},
+            {"module": modules["wallet"], "url": ""},
+            {"module": modules["users_list"], "url": ""},
+            {"module": modules["users_add"], "url": ""},
+            {"module": modules["get_menus"], "url": "api/v1/getMenus/"},
+            {"module": modules["transactions"], "url": "api/v1/transactions/"},
+            {"module": modules["products"], "url": "api/v1/products/"},
+            {"module": modules["auth"], "url": "api/v1/auth/"},
+            {"module": modules["inventory"], "url": "api/v1/inventory/"},
+            {"module": modules["get_form"], "url": "api/v1/getForm/"},
         ]
+
+
+
 
         # Create or update module URLs
         for data in module_urls_data:

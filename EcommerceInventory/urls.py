@@ -33,11 +33,12 @@ urlpatterns = [
     path('api/v1/superAdminForm/<str:modelName>/',SuperAdminDynamicFormController.as_view(),name='superadmindynamicForm'),
     path('api/v1/moduleUrls/',ModuleUrlsListAPIView.as_view(),name='moduleUrls_superadmin'),
     path('api/v1/getMenus/',ModuleView.as_view(),name='sidebarmenu'),
-    path('api/v1/products/',include('ProductServices.urls')),
-    path('api/v1/inventory/',include('InventoryServices.urls')),
-    path('api/v1/orders/',include('OrderService.urls')),
+    # path('api/v1/products/',include('ProductServices.urls')),
+    # path('api/v1/inventory/',include('InventoryServices.urls')),
+    # path('api/v1/orders/',include('OrderService.urls')),
     path('api/v1/uploads/',FileUploadViewInS3.as_view(),name='fileupload'),
-    path('api/v1/datamanagement/', include('DataManagement.urls'))
+    path('api/v1/datamanagement/', include('DataManagement.urls')),
+    path('api/v1/personalfinance/', include('PersonalFinance.urls'))
 ]
 
 if settings.DEBUG:

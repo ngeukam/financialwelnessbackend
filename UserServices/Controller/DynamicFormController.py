@@ -81,7 +81,6 @@ class DynamicFormController(APIView):
             model_instace.save()
         else:          
             model_instace=model_class.objects.create(**fieldsdata)
-
         #Serializing Data
         serialized_data=serialize('json',[model_instace])
         #Converting Serialized Data to JSON

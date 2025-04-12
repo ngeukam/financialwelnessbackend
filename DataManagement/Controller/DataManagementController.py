@@ -540,6 +540,7 @@ class FileStatsView(APIView):
                 result['issues'].append({
                     'type': 'missing_values',
                     'column': str(col),
+                    'message': 'Issue is located on column '+str(col),
                     'count': col_stats['empty_values'],
                     'severity': 'low'
                 })
@@ -549,6 +550,7 @@ class FileStatsView(APIView):
                 result['issues'].append({
                     'type': 'mixed_types',
                     'column': str(col),
+                    'message': 'Issue is located on column '+str(col),
                     'severity': 'medium'
                 })
 

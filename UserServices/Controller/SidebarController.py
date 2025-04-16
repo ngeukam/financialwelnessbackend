@@ -38,6 +38,38 @@ class ModuleView(generics.CreateAPIView):
 
         if request.user.role=='Super Admin':
             cleaned_menus.append({'id':0,'module_name':'Manage Module Urls','module_icon':'','is_menu':True,'is_active':True,'parent_id':None,'display_order':0,'module_url':'/manage/moduleUrls','module_description':'Module Urls','submenus':[]})
+        if request.user.role=='Super Admin' or request.user.role=='Admin':
+            cleaned_menus.append({'id':1,'module_name':'Categories Management','module_icon':'Category','is_menu':True,'is_active':True, 'parent_id': None ,'display_order':0,'module_url':'/manage/category','module_description':'Manage Categories','submenus':[]})
+        if request.user.role=='Super Admin' or request.user.role=='Admin':
+            cleaned_menus.append({'id':2,'module_name':'Users Management','module_icon':'attendance','is_menu':True,'is_active':True, 'parent_id': None ,'display_order':0,'module_url':None,'module_description':'Manage Users',
+                'submenus': [
+                {
+                    'id': 3,
+                    'module_name': 'Users List',
+                    'module_icon': 'Dashboard',
+                    'is_menu': True,
+                    'is_active': True,
+                    'parent_id': 2,
+                    'display_order': 0,
+                    'module_url': '/manage/users',
+                    'module_description': 'Users List',
+                    'submenus': []
+                },
+                {
+                    'id': 4,
+                    'module_name': 'Add User',
+                    'module_icon': 'Add',
+                    'is_menu': True,
+                    'is_active': True,
+                    'parent_id': 2,
+                    'display_order': 1,
+                    'module_url': '/form/users',
+                    'module_description': 'Add User',
+                    'submenus': []
+                }
+            ]})
+
+
 
         return renderResponse(data=cleaned_menus,message='All Modules',status=200)
     

@@ -19,7 +19,7 @@ class UserSerializerWithFilters(serializers.ModelSerializer):
     domain_user_id=serializers.SerializerMethodField()
     class Meta:
         model=Users
-        fields=['id', 'first_name', 'last_name', 'date_joined', 'email', 'phone', 'address', 'city', 'state', 'pincode', 'country', 'profile_pic', 'account_status', 'role', 'dob', 'username', 'social_media_links', 'addition_details', 'language', 'departMent', 'designation', 'time_zone', 'last_login', 'last_device', 'last_ip', 'currency', 'domain_name', 'plan_type', 'created_at', 'updated_at', 'domain_user_id', 'added_by_user_id']
+        fields=['id', 'first_name', 'last_name', 'date_joined', 'email', 'phone', 'address', 'city', 'state', 'country', 'profile_pic', 'account_status', 'role', 'dob', 'username', 'language', 'departMent', 'designation', 'time_zone', 'last_login', 'last_device', 'last_ip', 'currency', 'domain_name', 'plan_type', 'created_at', 'updated_at', 'domain_user_id', 'added_by_user_id']
 
     def get_domain_user_id(self,obj):
         return "#"+str(obj.domain_user_id.id) +" "+obj.domain_user_id.username if obj.domain_user_id!=None else ''

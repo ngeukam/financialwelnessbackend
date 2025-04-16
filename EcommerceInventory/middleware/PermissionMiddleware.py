@@ -1,8 +1,10 @@
 from django.http import JsonResponse
-from UserServices.models import ModuleUrls, UserPermissions
+# from userservices.models import ModuleUrls, UserPermissions
 from rest_framework_simplejwt.authentication import JWTAuthentication
 import re
 from django.db.models import Q
+
+from UserServices.models import ModuleUrls, UserPermissions
 
 class PermissionMiddleware:
     def __init__(self, get_response):
@@ -46,9 +48,13 @@ class PermissionMiddleware:
 def urlToSkip():
     modules = list(ModuleUrls.objects.filter(module__isnull=True).values_list('url', flat=True))
     def should_skip(url):
-        return any(url.startswith(skip_url) for skip_url in modules)
+        for skip_url in modules:
+            if url[:len(skip_url)] == skip_url:  # Compare only the relevant substring
+                return True
+        return False
 
     return should_skip
+
 
 
 def find_matching_module(url):

@@ -3,6 +3,7 @@ from rest_framework import generics
 from rest_framework import serializers
 from rest_framework.permissions import IsAuthenticated
 from rest_framework_simplejwt.authentication import JWTAuthentication
+from UserServices.models import Users
 from PersonalFinance.models import  Incomes
 from django.db.models import (
     FloatField,
@@ -27,7 +28,98 @@ class IncomeListSerializer(serializers.ModelSerializer):
             return obj.income_total
         return obj.amount or 0
 
+class IncomeSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Incomes
+        fields = "__all__"
+    
+    def create(self, validated_data):
+        return Incomes.objects.create(**validated_data)
+    
+    def update(self, instance, validated_data):
+        return super().update(instance, validated_data)
 
+class CreateIncomeView(generics.CreateAPIView):
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, id=None):
+        income = Incomes.objects.filter(
+            domain_user_id=request.user.domain_user_id.id, 
+            id=id
+        ).first() if id else Incomes()
+        
+        income_fields = getDynamicFormFields(
+            income, 
+            request.user.domain_user_id.id, 
+            skip_fields=['status']
+        )
+        
+        return renderResponse(
+            data={'incomeFields': income_fields},
+            message='Income Fields',
+            status=200
+        )
+
+    def post(self, request, id=None):
+        data = request.data.copy()
+        data.update({
+            'added_by_user_id': request.user.id,
+            'domain_user_id': request.user.domain_user_id.id
+        })
+        # Validation: Check wallet balance for income amount
+        try:
+            amount = float(data.get('amount', 0))            
+            # For income, we might want different validation than expense
+            # For example, check if amount is positive
+            if amount <= 0:
+                return renderResponse(
+                    data={'amount': amount},
+                    message='Income amount must be positive',
+                    status=400
+                )
+                
+        except (ValueError, TypeError) as e:
+            return renderResponse(
+                data={'error': str(e)},
+                message='Invalid amount value',
+                status=400
+            )
+
+        # Create/update logic
+        if id:
+            income = Incomes.objects.filter(
+                domain_user_id=request.user.domain_user_id.id,
+                id=id,
+                status='ACTIVE'
+            ).first()
+            
+            if not income:
+                return renderResponse(
+                    data={},
+                    message='Income Not Found',
+                    status=404
+                )
+            data['updated_by_user_id'] = request.user.id
+            serializer = IncomeSerializer(income, data=data)
+        else:
+            serializer = IncomeSerializer(data=data)
+
+        if serializer.is_valid():
+            serializer.save()
+            
+            return renderResponse(
+                data=serializer.data,
+                message='Income created successfully' if not id else 'Income updated successfully',
+                status=201
+            )
+
+        return renderResponse(
+            data=serializer.errors,
+            message='Validation error',
+            status=400
+        )
+        
 class IncomeListView(generics.ListAPIView):
     serializer_class = IncomeListSerializer
     authentication_classes = [JWTAuthentication]
@@ -39,7 +131,7 @@ class IncomeListView(generics.ListAPIView):
         now = timezone.now()
         
         queryset = Incomes.objects.filter(
-            domain_user_id=current_user.domain_user_id.id
+            domain_user_id=current_user.domain_user_id.id,
         ).annotate(
             income_total=Coalesce(
                 Sum('amount'),

@@ -3,6 +3,7 @@ from rest_framework import generics
 from rest_framework import serializers
 from rest_framework.permissions import IsAuthenticated
 from rest_framework_simplejwt.authentication import JWTAuthentication
+from UserServices.models import Users
 from PersonalFinance.models import ExpenseItems, Expenses, Wallet
 from django.db.models import (
     FloatField,
@@ -25,7 +26,7 @@ class ExpenseListSerializer(serializers.ModelSerializer):
     domain_user_id=serializers.CharField(source='domain_user_id.username',read_only=True)
     expense_total = serializers.SerializerMethodField()
     items = ExpenseItemSerializer(many=True, source='expense_id_item', read_only=True)
-    # category_names = serializers.SerializerMethodField()
+    expense_note = serializers.SerializerMethodField()
     class Meta:
         model=Expenses
         fields="__all__"
@@ -33,6 +34,14 @@ class ExpenseListSerializer(serializers.ModelSerializer):
     def get_expense_total(self, obj):
         # Calculate total for this specific expense
         return obj.expense_id_item.aggregate(total=Sum('price'))['total'] or 0
+    
+    def get_expense_note(self, obj):
+            try:
+                return obj.expense_id_item.get().note
+            except ExpenseItems.DoesNotExist:
+                return ""
+            except ExpenseItems.MultipleObjectsReturned:
+                return obj.expense_id_item.first().note
 
 class ExpenseSerializer(serializers.ModelSerializer):
     items=ExpenseItemSerializer(many=True,source='expense_id_item')
@@ -79,9 +88,11 @@ class CreateExpenseView(generics.CreateAPIView):
         expense=Expenses.objects.filter(domain_user_id=request.user.domain_user_id.id,id=id).first() if id else Expenses()
         expenseItems=ExpenseItems.objects.filter(expense_id=id) if id else []
         expenseItems=ExpenseItemSerializer(expenseItems,many=True).data
-      
+        admin_user = Users.objects.filter(role__in=['Admin', 'Super Admin']).first()
+        admin_domain_id = admin_user.domain_user_id if admin_user else None
         expenseFields=getDynamicFormFields(expense,request.user.domain_user_id.id, skip_fields=['status'])
-        expenseItemFields=getDynamicFormFields(ExpenseItems(),request.user.domain_user_id.id,skip_related=['expense_id'],skip_fields=['expense_id','status'])
+        expenseItemFields=getDynamicFormFields(ExpenseItems(),admin_domain_id,skip_related=['expense_id'],skip_fields=['expense_id','status'])
+        print('expenseItemFields',expenseItemFields)
         return renderResponse(data={'expenseItems':expenseItems,'expenseFields':expenseFields,'expenseItemFields':expenseItemFields},message='Expense Fields',status=200)
 
     def post(self, request, id=None):
@@ -91,32 +102,13 @@ class CreateExpenseView(generics.CreateAPIView):
             'domain_user_id': request.user.domain_user_id.id
         })
 
-         # Validation 1: Check for duplicate categories in items
-        # if 'items' in data and isinstance(data['items'], list):
-        #     category_ids = []
-        #     duplicate_categories = []
-            
-        #     for item in data['items']:
-        #         if 'category_id' in item:
-        #             category_id = item['category_id']
-        #             if category_id in category_ids:
-        #                 duplicate_categories.append(category_id)
-        #             category_ids.append(category_id)
-            
-        #     if duplicate_categories:
-        #         return renderResponse(
-        #             data={'items': f'Duplicate categories found in items: {", ".join(map(str, duplicate_categories))}'},
-        #             message='Each category can only be used once per expense',
-        #             status=400
-        #         )
-
-        # Validation 2: Budget sum check
+        # Validation 1: Budget sum check
         if 'items' in data:
             try:
                 items_sum = sum(float(item.get('price', 0)) for item in data['items'])
                 
                 # Get the user's wallet balance
-                wallet = Wallet.objects.get(user=request.user)
+                wallet = Wallet.objects.get(user=request.user.domain_user_id)  # Changed to domain_user_id
                 wallet.update_balance()  # Ensure balance is up-to-date
                 
                 if items_sum > wallet.current_balance:
@@ -129,7 +121,7 @@ class CreateExpenseView(generics.CreateAPIView):
                         message='Sum of items price exceeds your wallet balance',
                         status=400
                     )
-  
+
             except (ValueError, TypeError) as e:
                 return renderResponse(
                     data={'error': str(e)},
@@ -143,24 +135,34 @@ class CreateExpenseView(generics.CreateAPIView):
                     status=404
                 )
 
-        # Existing create/update logic
+        # Create/update logic
         if id:
             expense = Expenses.objects.filter(
                 domain_user_id=request.user.domain_user_id.id,
                 id=id
             ).first()
+            
             if not expense:
                 return renderResponse(
                     data={},
                     message='Expense Not Found',
                     status=404
                 )
+            
             serializer = ExpenseSerializer(expense, data=data)
         else:
             serializer = ExpenseSerializer(data=data)
 
         if serializer.is_valid():
-            serializer.save()
+            expense = serializer.save()
+            
+            # Update wallet balance after successful save
+            try:
+                wallet = Wallet.objects.get(user=request.user.domain_user_id)
+                wallet.update_balance()
+            except Wallet.DoesNotExist:
+                pass
+                
             return renderResponse(
                 data=serializer.data,
                 message='Expense created successfully' if not id else 'Expense updated successfully',

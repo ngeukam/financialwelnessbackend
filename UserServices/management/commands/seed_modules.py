@@ -23,25 +23,22 @@ class Command(BaseCommand):
         modules_data = [
             {"key": "dashboard", "module_name": "Dashboard", "module_icon": "Dashboard", "is_menu": True, "module_url": "", "parent_key": None},
             {"key": "finance", "module_name": "Personal Finance", "module_icon": "Finance", "is_menu": True, "module_url": "", "parent_key": None},
-            {"key": "data", "module_name": "Data Management", "module_icon": "Wharehouse", "is_menu": True, "module_url": "manage/data", "parent_key": None},
-            {"key": "users", "module_name": "Users Management", "module_icon": "attendance", "is_menu": True, "module_url": "", "parent_key": None},
+            {"key": "data", "module_name": "Data Management", "module_icon": "Warehouse", "is_menu": True, "module_url": "manage/data", "parent_key": None},
+            # {"key": "users", "module_name": "Users Management", "module_icon": "attendance", "is_menu": True, "module_url": "", "parent_key": None},
                        
             {"key": "goal", "module_name": "Create Goal", "module_icon": "attendance", "is_menu": False, "module_url": "/create/goal ", "parent_key": "finance"},
 
             {"key": "wallet", "module_name": "Wallet", "module_icon": "Wallet", "is_menu": True, "module_url": "pf/wallet", "parent_key": "finance"},            
-            {"key": "cat_mgmt", "module_name": "Categories Management", "module_icon": "Category", "is_menu": True, "module_url": "pf/manage/category", "parent_key": "finance"},
+            # {"key": "cat_mgmt", "module_name": "Categories Management", "module_icon": "Category", "is_menu": True, "module_url": "pf/manage/category", "parent_key": "finance"},
             {"key": "fin_mgmt", "module_name": "Finance Management", "module_icon": "Money", "is_menu": True, "module_url": "pf/manage/finance", "parent_key": "finance"},
 
 
-            {"key": "users_list", "module_name": "Users List", "module_icon": "Dashboard", "is_menu": True, "module_url": "/manage/users", "parent_key": "users"},
-            {"key": "users_add", "module_name": "Add User", "module_icon": "Add", "is_menu": True, "module_url": "/form/users", "parent_key": "users"},
+            # {"key": "users_list", "module_name": "Users List", "module_icon": "Dashboard", "is_menu": True, "module_url": "/manage/users", "parent_key": "users"},
+            # {"key": "users_add", "module_name": "Add User", "module_icon": "Add", "is_menu": True, "module_url": "/form/users", "parent_key": "users"},
             
-            {"key": "get_menus", "module_name": "getMenus", "module_icon": "attendance", "is_menu": False, "module_url": "", "parent_key": None},
-            {"key": "transactions", "module_name": "Transactions", "module_icon": "attendance", "is_menu": False, "module_url": "", "parent_key": None},
-            {"key": "products", "module_name": "Products", "module_icon": "attendance", "is_menu": False, "module_url": "", "parent_key": None},
-            {"key": "auth", "module_name": "Auth", "module_icon": "attendance", "is_menu": False, "module_url": "", "parent_key": None},
-            {"key": "inventory", "module_name": "Inventory", "module_icon": "attendance", "is_menu": False, "module_url": "", "parent_key": None},
-            {"key": "get_form", "module_name": "getForm", "module_icon": "attendance", "is_menu": False, "module_url": "", "parent_key": None},
+            # {"key": "get_menus", "module_name": "getMenus", "module_icon": "attendance", "is_menu": False, "module_url": "", "parent_key": None},
+            # {"key": "auth", "module_name": "Auth", "module_icon": "attendance", "is_menu": False, "module_url": "", "parent_key": None},
+            # {"key": "get_form", "module_name": "getForm", "module_icon": "attendance", "is_menu": False, "module_url": "", "parent_key": None},
         ]
 
 
@@ -60,22 +57,20 @@ class Command(BaseCommand):
 
         # Define module URLs
         module_urls_data = [
-            {"module": modules["dashboard"], "url": "/"},
-            {"module": modules["finance"], "url": ""},
-            {"module": modules["data"], "url": ""},
-            {"module": modules["users"], "url": ""},
-            {"module": modules["goal"], "url": ""},
-            {"module": modules["cat_mgmt"], "url": ""},
-            {"module": modules["fin_mgmt"], "url": ""},
-            {"module": modules["wallet"], "url": ""},
-            {"module": modules["users_list"], "url": ""},
-            {"module": modules["users_add"], "url": ""},
-            {"module": modules["get_menus"], "url": "api/v1/getMenus/"},
-            {"module": modules["transactions"], "url": "api/v1/transactions/"},
-            {"module": modules["products"], "url": "api/v1/products/"},
-            {"module": modules["auth"], "url": "api/v1/auth/"},
-            {"module": modules["inventory"], "url": "api/v1/inventory/"},
-            {"module": modules["get_form"], "url": "api/v1/getForm/"},
+            # {"module": modules["dashboard"], "url": "/"},
+            # {"module": modules["finance"], "url": ""},
+            # {"module": modules["data"], "url": ""},
+            # {"module": modules["users"], "url": ""},
+            # {"module": modules["goal"], "url": ""},
+            # {"module": modules["cat_mgmt"], "url": ""},
+            # {"module": modules["fin_mgmt"], "url": ""},
+            # {"module": modules["wallet"], "url": ""},
+            # {"module": modules["users_list"], "url": ""},
+            # {"module": modules["users_add"], "url": ""},
+            {"module": None, "url": "/api/v1/getMenus/"},
+            {"module": None, "url": "/api/v1/getForm/"},
+            {"module": None, "url": "/api/v1/auth/login/"},
+            {"module": None, "url": "/api/v1/auth/signup/"},
         ]
 
 

@@ -16,7 +16,6 @@ class DynamicFormController(APIView):
         #Checking if Model Exist in Our Dynamic Form Models
         if modelName not in getDynamicFormModels():
             return renderResponse(data='Model Not Exist',message='Model Not Exist',status=404)
-        
         #Getting the Model Name from Dynamic Form Models
         model=getDynamicFormModels()[modelName]
         #Getting the Model Class from the Model Name
@@ -49,13 +48,7 @@ class DynamicFormController(APIView):
 
         #Filtering the Post Data Fields by Model Fields and Eliminating the Extra Fields
         fieldsdata={key:value for key,value in fields.items() if key in model_fields}
-        #All the Model Fields Data
-        print(model_fields)
-        #All the Post Data Fields
-        print(fields.items())
-        #Santizing the Post Data Fields by model fields data and eliminating the extra fields
-        print(fieldsdata.items())
-
+     
         #Assigning Foreign key instance for ForeignKey Fields in the Post Data by getting the instance of the related model by the ID
         for field in fields_info:
             if field.is_relation and field.name in fieldsdata and isinstance(fieldsdata[field.name],int):
@@ -94,7 +87,6 @@ class DynamicFormController(APIView):
     def get(self,request,modelName,id=None):
         if modelName not in getDynamicFormModels():
             return renderResponse(data='Model Not Found',message='Model Not Found',status=404)
-        
         model = getDynamicFormModels()[modelName]
         model_class=apps.get_model(model)
 
@@ -109,6 +101,5 @@ class DynamicFormController(APIView):
                 return renderResponse(data='Model Item Not Found',message='Model Item Not Found',status=404)
         else:
             model_instance = model_class()
-
         fields=getDynamicFormFields(model_instance,request.user.domain_user_id)
         return renderResponse(data=fields,message='Form fields fetched successfully')

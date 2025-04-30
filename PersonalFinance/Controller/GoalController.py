@@ -1,6 +1,7 @@
 from EcommerceInventory.Helpers import CommonListAPIMixin, CustomPageNumberPagination, getDynamicFormFields, renderResponse
 from rest_framework import generics
 from datetime import date, datetime, timedelta
+from django.utils import timezone
 from rest_framework import serializers
 from rest_framework.views import APIView
 from rest_framework.response import Response
@@ -257,29 +258,26 @@ class GoalListAPIView(generics.ListAPIView):
 
     def get_queryset(self):
         # Store calculated metrics in the view instance for later use
-        today = date.today()
         user = self.request.user
+        now = timezone.now()
         
         # Calculate date ranges
-        first_day_current_month = today.replace(day=1)
-        first_day_last_month = (first_day_current_month - timedelta(days=1)).replace(day=1)
-        last_day_last_month = first_day_current_month - timedelta(days=1)
+        first_day_current_month = now.replace(day=1)
+        last_day_last_month = first_day_current_month - timezone.timedelta(days=1)
         
         # Calculate and store metrics
         current_month_achieved = Goals.objects.filter(
-            domain_user_id=user.domain_user_id,
+            domain_user_id=user.domain_user_id.id,
             reached='YES',
-            updated_at__gte=first_day_current_month,
-            updated_at__lte=today
+            created_at__year=now.year,
+            created_at__month=now.month
         ).count()
-        
         last_month_achieved = Goals.objects.filter(
             domain_user_id=user.domain_user_id,
             reached='YES',
-            updated_at__gte=first_day_last_month,
-            updated_at__lte=last_day_last_month
+            created_at__year=last_day_last_month.year,
+            created_at__month=last_day_last_month.month
         ).count()
-        
         total_budget_achieved = Goals.objects.filter(
             domain_user_id=user.domain_user_id,
             reached='YES',

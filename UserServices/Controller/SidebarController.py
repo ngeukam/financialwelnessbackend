@@ -40,8 +40,9 @@ class ModuleView(generics.CreateAPIView):
             cleaned_menus.append({'id':0,'module_name':'Manage Module Urls','module_icon':'','is_menu':True,'is_active':True,'parent_id':None,'display_order':0,'module_url':'/manage/moduleUrls','module_description':'Module Urls','submenus':[]})
         if request.user.role=='Super Admin' or request.user.role=='Admin':
             cleaned_menus.append({'id':1,'module_name':'Categories Management','module_icon':'Category','is_menu':True,'is_active':True, 'parent_id': None ,'display_order':0,'module_url':'/manage/category','module_description':'Manage Categories','submenus':[]})
+            cleaned_menus.append({'id':2,'module_name':'References Values','module_icon':'Settings','is_menu':True,'is_active':True, 'parent_id': None ,'display_order':0,'module_url':'/manage/refsvalues','module_description':'Manage References Values','submenus':[]})
         if request.user.role=='Super Admin' or request.user.role=='Admin':
-            cleaned_menus.append({'id':2,'module_name':'Users Management','module_icon':'attendance','is_menu':True,'is_active':True, 'parent_id': None ,'display_order':0,'module_url':None,'module_description':'Manage Users',
+            cleaned_menus.append({'id':3,'module_name':'Users Management','module_icon':'attendance','is_menu':True,'is_active':True, 'parent_id': None ,'display_order':0,'module_url':None,'module_description':'Manage Users',
                 'submenus': [
                 {
                     'id': 3,

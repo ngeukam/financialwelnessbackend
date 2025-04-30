@@ -42,7 +42,11 @@ class UserWithFilterListView(generics.ListAPIView):
     pagination_class = CustomPageNumberPagination
 
     def get_queryset(self):
-        queryset=Users.objects.filter(domain_user_id=self.request.user.domain_user_id.id)
+        user = self.request.user
+        if(user.role == "Admin" or user.role == "Super Admin"):
+            queryset=Users.objects.all()
+        else:
+            queryset=Users.objects.filter(domain_user_id=self.request.user.domain_user_id.id)
         return queryset
     
     @CommonListAPIMixinWithFilter.common_list_decorator(UserSerializerWithFilters)

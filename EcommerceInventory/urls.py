@@ -38,7 +38,8 @@ urlpatterns = [
     # path('api/v1/orders/',include('OrderService.urls')),
     path('api/v1/uploads/',FileUploadViewInS3.as_view(),name='fileupload'),
     path('api/v1/datamanagement/', include('DataManagement.urls')),
-    path('api/v1/personalfinance/', include('PersonalFinance.urls'))
+    path('api/v1/personalfinance/', include('PersonalFinance.urls')),
+    path('api/v1/assess/', include('CreditRisk.urls')),
 ]
 
 if settings.DEBUG:

@@ -172,7 +172,7 @@ class FinancialChartsAPIView(APIView):
         # Get categories
         categories = Categories.objects.filter(
             id__in=category_ids,
-            domain_user_id=user.domain_user_id,
+            # domain_user_id=user.domain_user_id,
         ).values('id', 'name')
 
         # Calculate totals

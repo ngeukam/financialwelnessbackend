@@ -92,7 +92,6 @@ class CreateExpenseView(generics.CreateAPIView):
         admin_domain_id = admin_user.domain_user_id if admin_user else None
         expenseFields=getDynamicFormFields(expense,request.user.domain_user_id.id, skip_fields=['status'])
         expenseItemFields=getDynamicFormFields(ExpenseItems(),admin_domain_id,skip_related=['expense_id'],skip_fields=['expense_id','status'])
-        print('expenseItemFields',expenseItemFields)
         return renderResponse(data={'expenseItems':expenseItems,'expenseFields':expenseFields,'expenseItemFields':expenseItemFields},message='Expense Fields',status=200)
 
     def post(self, request, id=None):

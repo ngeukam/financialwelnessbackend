@@ -45,6 +45,7 @@ INSTALLED_APPS = [
     'DataManagement',
     'PersonalFinance',
     'FinancialAnalysis',
+    'CreditRisk',
     'rest_framework',
     'rest_framework_simplejwt',
     'corsheaders',

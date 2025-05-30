@@ -23,10 +23,12 @@ class Command(BaseCommand):
         modules_data = [
             {"key": "dashboard", "module_name": "Dashboard", "module_icon": "Dashboard", "is_menu": True, "module_url": "", "parent_key": None},
             {"key": "finance", "module_name": "Personal Finance", "module_icon": "Finance", "is_menu": True, "module_url": "", "parent_key": None},
-            {"key": "finance_analysis", "module_name": "Financial Analysis", "module_icon": "FinanceAnalysis", "is_menu": True, "module_url": "/manage/financial-analysis", "parent_key": None},
+            {"key": "finance_analysis", "module_name": "Financial Analysis", "module_icon": "FinanceAnalysis", "is_menu": True, "module_url": "/overview/financial-analysis", "parent_key": None},
 
             {"key": "data", "module_name": "Data Management", "module_icon": "Warehouse", "is_menu": True, "module_url": "/manage/data", "parent_key": None},
-                       
+            
+            {"key": "risk_management", "module_name": "Risk Management", "module_icon": "Finance", "is_menu": True, "module_url": "/manage/risk", "parent_key": None},
+
             {"key": "goal", "module_name": "Create Goal", "module_icon": "attendance", "is_menu": False, "module_url": "/create/goal ", "parent_key": "finance"},
 
             {"key": "wallet", "module_name": "Wallet", "module_icon": "Wallet", "is_menu": True, "module_url": "/pf/wallet", "parent_key": "finance"},            

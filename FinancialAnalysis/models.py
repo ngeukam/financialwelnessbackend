@@ -5,14 +5,12 @@ from UserServices.models import Users
 # Create your models here.
 class Finances(models.Model):
     id=models.AutoField(primary_key=True)
-    period_name=models.CharField(max_length=255, blank=True, null=True)
+    started_period = models.DateField(null=True, blank=True)
+    ended_period = models.DateField(null=True, blank=True)
     current_assets=models.FloatField(blank=True, null=True)
-    # cash_cash_equivalents=models.FloatField(blank=True, null=True)
-    # inventory=models.FloatField(blank=True, null=True)
     total_assets=models.FloatField(blank=True, null=True)
     current_liabilities=models.FloatField(blank=True, null=True)
     total_liabilities=models.FloatField(blank=True, null=True)
-    # share_holder_equity=models.FloatField(blank=True, null=True)
     revenue=models.FloatField(blank=True, null=True)
     cost_goods_sold=models.FloatField(blank=True, null=True)
     operating_expense=models.FloatField(blank=True, null=True)

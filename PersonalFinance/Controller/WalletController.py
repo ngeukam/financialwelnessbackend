@@ -3,7 +3,7 @@ from rest_framework.response import Response
 from django.db.models import Sum, Count
 from datetime import date, datetime, timedelta
 import json
-from PersonalFinance.models import Categories, ExpenseItems, Incomes, Wallet
+from PersonalFinance.models import Categories, ExpenseItems, Goals, Incomes, Wallet
 from rest_framework.permissions import IsAuthenticated
 from rest_framework_simplejwt.authentication import JWTAuthentication
 import random
@@ -28,7 +28,6 @@ class FinancialChartsAPIView(APIView):
         # Calculate date range
         end_date = datetime.now().date()
         start_date = end_date - timedelta(days=30*months_back)
-
         # 1. Income vs Expenses Over Time
         income_data = self._get_time_series_data(
             model=Incomes,
@@ -53,13 +52,28 @@ class FinancialChartsAPIView(APIView):
         # 2. Spending by Category
         category_spending = self._get_category_spending(user, start_date, end_date)
         
+        # 3. Net Savings
+        total_income = sum(income_data.values())
+        total_expenses = sum(expenses_data.values())
+        net_savings = total_income - total_expenses
+        goals_savings = Goals.objects.filter(reached='YES', domain_user_id=user).aggregate(total=Sum('budget'))['total'] or 0
+
         return Response({
             'income_vs_expenses': {
                 'labels': list(income_data.keys()),
                 'income': list(income_data.values()),
                 'expenses': list(expenses_data.values())
             },
-            'spending_by_category': category_spending
+            'spending_by_category': category_spending,
+            'summary': {
+                'total_income': total_income,
+                'total_expenses': total_expenses,
+                'calculated_net_savings': net_savings,
+                'goals_savings': goals_savings,
+                'savings_rate': (net_savings / total_income * 100) if total_income > 0 else 0,
+                'goals_reached': Goals.objects.filter(reached='YES', domain_user_id=user).count(),
+                'total_goals': Goals.objects.filter(domain_user_id=user).count()
+            }
         })
         
     def _parse_date(self, date_input):

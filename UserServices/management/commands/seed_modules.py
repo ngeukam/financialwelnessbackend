@@ -27,7 +27,12 @@ class Command(BaseCommand):
 
             {"key": "data", "module_name": "Data Management", "module_icon": "Warehouse", "is_menu": True, "module_url": "/manage/data", "parent_key": None},
             
-            {"key": "risk_management", "module_name": "Risk Management", "module_icon": "Finance", "is_menu": True, "module_url": "/manage/risk", "parent_key": None},
+            {"key": "risk_management", "module_name": "Risk Management", "module_icon": "Finance", "is_menu": True, "module_url": "", "parent_key": None},
+            {"key": "credit_risk", "module_name": "Credit Risk", "module_icon": "Finance", "is_menu": True, "module_url": "/manage/credit-risk", "parent_key": "risk_management"},
+            {"key": "market_risk", "module_name": "Market Risk", "module_icon": "Finance", "is_menu": True, "module_url": "/manage/market-risk", "parent_key": "risk_management"},
+            # {"key": "early_warning", "module_name": "Early Warning", "module_icon": "Finance", "is_menu": True, "module_url": "/manage/early-warning", "parent_key": "risk_management"},
+            {"key": "smart_analysis", "module_name": "Smart Analysis", "module_icon": "Finance", "is_menu": True, "module_url": "/manage/smart-analysis", "parent_key": "risk_management"},
+
 
             {"key": "goal", "module_name": "Create Goal", "module_icon": "attendance", "is_menu": False, "module_url": "/create/goal ", "parent_key": "finance"},
 

@@ -20,7 +20,8 @@ class UniversalJSONAnalyzer:
             'time_series': self._time_series,
             'correlation': self._correlation,
             'pattern_detect': self._pattern_detect,
-            'nested_aggregate': self._nested_aggregate
+            'nested_aggregate': self._nested_aggregate,
+            'multiple_aggregate':self._multiple_aggregate
         }
     
     def analyze(self, json_data: Union[str, Dict], operation: str, params: Dict = None) -> Dict:
@@ -582,7 +583,7 @@ class UniversalJSONAnalyzer:
                 patterns['currency_strings'].append(col)
         
         return {'detected_patterns': dict(patterns)}
-    
+
     def _nested_aggregate(self, data: Any, params: Dict) -> Dict:
         """Enhanced nested aggregation with multiple aggregation functions"""
         if not isinstance(data, (dict, list)):
@@ -599,7 +600,7 @@ class UniversalJSONAnalyzer:
                 if pd.api.types.is_numeric_dtype(df[col])
             ])
             agg_functions = params.get('agg_functions', ['mean'])
-            
+          
             # Validate inputs
             if not group_by:
                 group_by = [col for col in df.columns if df[col].nunique() < 10]
@@ -694,7 +695,6 @@ class UniversalJSONAnalyzer:
                             })
                 except Exception as e:
                     results[func] = f"Aggregation failed: {str(e)}"
-            
             return plots[0]
         
         # For deep nested structures
@@ -709,8 +709,101 @@ class UniversalJSONAnalyzer:
             }
         
         return {"message": "No aggregation performed on simple data"}
+    
+    def _multiple_aggregate(self, data: Any, params: Dict) -> Dict[str, Any]:
+        """
+        Generate visualizations for three variables with different chart types
+        
+        Args:
+            data: Input data to analyze
+            params: Dictionary containing:
+                - x_col: Column for x-axis (categorical or temporal)
+                - y1_col: First numeric column to visualize
+                - y2_col: Second numeric column to visualize
+                - plot_type: Type of visualization 
+                - z_col: Optional third numeric column
+        
+        Returns:
+            Dictionary containing the plot and metadata
+        """
+        df = self._to_dataframe(data)
+        
+        # Extract parameters with defaults
+        x_col = params.get('x_col')
+        y1_col = params.get('y1_col')
+        y2_col = params.get('y2_col')
+        plot_type = params.get('plot_type', 'grouped_bar')
+        z_col = params.get('z_col')
+        
+        # Validate required parameters
+        if not all([x_col, y1_col, y2_col]):
+            raise ValueError("Missing required parameters (x_col, y1_col, y2_col)")
+        
+        # Validate columns exist
+        for col in [x_col, y1_col, y2_col]:
+            if col not in df.columns:
+                raise ValueError(f"Column '{col}' not found in data")
+        
+        plt.switch_backend('Agg')
+        fig, ax = plt.subplots(figsize=(12, 7))
+        
+        # Clean data
+        x_vals = df[x_col].astype(str)
+        y1_vals = df[y1_col]
+        y2_vals = df[y2_col]
+        z_vals = df[z_col] if z_col else None
+        
+        # Generate the selected plot type
+        if plot_type == 'grouped_bar':
+            width = 0.35
+            x_pos = np.arange(len(x_vals))
+            ax.bar(x_pos - width/2, y1_vals, width, label=y1_col)
+            ax.bar(x_pos + width/2, y2_vals, width, label=y2_col)
+            ax.set_xticks(x_pos)
+            ax.set_xticklabels(x_vals, rotation=45)
+            
+        elif plot_type == 'stacked_bar':
+            ax.bar(x_vals, y1_vals, label=y1_col)
+            ax.bar(x_vals, y2_vals, bottom=y1_vals, label=y2_col)
+            plt.xticks(rotation=45)
+            
+        elif plot_type == 'line_bar':
+            ax.bar(x_vals, y1_vals, label=y1_col)
+            ax2 = ax.twinx()
+            ax2.plot(x_vals, y2_vals, 'r-', label=y2_col)
+            ax2.set_ylabel(y2_col)
+            plt.xticks(rotation=45)
+            
+        elif plot_type == 'scatter' and z_col:
+            scatter = ax.scatter(y1_vals, y2_vals, c=z_vals, s=100)
+            ax.set_xlabel(y1_col)
+            ax.set_ylabel(y2_col)
+            plt.colorbar(scatter, label=z_col)
+            
+        else:
+            raise ValueError(f"Unsupported plot type: {plot_type}")
 
-
+        # Common configuration
+        ax.set_xlabel(x_col)
+        ax.set_title(f"{y1_col} vs {y2_col} by {x_col}")
+        ax.legend(loc='upper left')
+        plt.tight_layout()
+        
+        # Convert to base64
+        buf = io.BytesIO()
+        plt.savefig(buf, format='png', dpi=100, bbox_inches='tight')
+        plt.close()
+        
+        return {
+            'plot': base64.b64encode(buf.getvalue()).decode('utf-8'),
+            'metadata': {
+                'x_axis': x_col,
+                'y_axes': [y1_col, y2_col],
+                'z_axis': z_col,
+                'plot_type': plot_type
+            }
+        }
+    
     def _flatten_data(self, data: Dict, parent_key: str = '', sep: str = '.') -> Dict:
         """Flatten nested dictionary structure"""
         items = {}

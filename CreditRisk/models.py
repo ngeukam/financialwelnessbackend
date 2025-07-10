@@ -8,8 +8,11 @@ class CreditRiskAssessment(models.Model):
     updated_by_user_id=models.ForeignKey(Users,on_delete=models.CASCADE,blank=True,null=True,related_name='updated_by_user_id_risk')
     income = models.FloatField()
     loan_amount = models.FloatField()
+    started_period = models.DateField(null=True, blank=True)
+    ended_period = models.DateField(null=True, blank=True)
     credit_score = models.IntegerField()
     risk_score = models.FloatField(null=True, blank=True)
+    loan_duration_months = models.PositiveIntegerField(null=True, blank=True)
     prediction = models.BooleanField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
@@ -21,7 +24,8 @@ class MarketRiskAssessment(models.Model):
     domain_user_id = models.ForeignKey(Users, on_delete=models.CASCADE, blank=True, null=True, related_name='market_risk_assessments')
     created_by_user_id = models.ForeignKey(Users, on_delete=models.CASCADE, blank=True, null=True, related_name='created_market_risks')
     updated_by_user_id = models.ForeignKey(Users, on_delete=models.CASCADE, blank=True, null=True, related_name='updated_market_risks')
-    
+    started_period = models.DateField(null=True, blank=True)
+    ended_period = models.DateField(null=True, blank=True)
     # Market data inputs
     stock_prices = models.JSONField()  # Array of historical prices
     exchange_rates = models.JSONField(null=True, blank=True)
@@ -50,6 +54,8 @@ class EarlyWarningIndicator(models.Model):
     user = models.ForeignKey(Users, on_delete=models.CASCADE, related_name='ews_indicators')
     indicator_type = models.CharField(max_length=20, choices=INDICATOR_TYPES)
     value = models.JSONField()
+    started_period = models.DateField(null=True, blank=True)
+    ended_period = models.DateField(null=True, blank=True)
     threshold = models.JSONField(default=dict)
     is_anomaly = models.BooleanField(default=False)
     timestamp = models.DateTimeField(auto_now_add=True)
@@ -65,7 +71,8 @@ class FinancialIndicator(models.Model):
         (2, 'High Risk')
     ]
     
-    user = models.ForeignKey(Users, on_delete=models.CASCADE)
+    started_period = models.DateField(null=True, blank=True)
+    ended_period = models.DateField(null=True, blank=True)
     timestamp = models.DateTimeField(auto_now_add=True)
     gdp_growth = models.FloatField()
     inflation = models.FloatField()
@@ -74,6 +81,10 @@ class FinancialIndicator(models.Model):
     predicted_risk = models.IntegerField(choices=RISK_LEVELS)
     confidence_score = models.FloatField()
     metadata = models.JSONField(default=dict)
+    domain_user_id = models.ForeignKey(Users, on_delete=models.CASCADE, blank=True, null=True, related_name='financial_risk_assessments')
+    created_by_user_id = models.ForeignKey(Users, on_delete=models.CASCADE, blank=True, null=True, related_name='created_financial_risks')
+    updated_by_user_id = models.ForeignKey(Users, on_delete=models.CASCADE, blank=True, null=True, related_name='updated_financial_risks')
+  
 
     class Meta:
         ordering = ['-timestamp']
